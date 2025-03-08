@@ -41,7 +41,15 @@ header {
 
 .my_name {
   color: #F00;
-  font-size: 40px;
+  font-size: 45px;
+}
+
+.my_name {
+  transition: all 0.3s ease 0s;
+}
+
+.my_name:hover{
+  color: #333333;
 }
 
 h2 {
