@@ -1,0 +1,1071 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <link rel="stylesheet" href="../../../../src/style.css"/>
+        <title>Heat Eqn: Square Plate</title>
+    </head>
+    <body>
+        <header>
+          <h1><a href="https://www.youtube.com/watch?v=dQw4w9WgXcQ" target="_blank" class="my_name">Allen Rakhamimov</a></h1>
+          <nav>
+            <ul class="nav__links">
+              <li><a href="#"> Projects </a></li>
+              <li><a href="#"> Tools </a></li>
+              <li><a href="#"> Videos </a></li>
+              <li><a href="#"> About </a></li>
+              <li><a href="#"> Contact </a></li>
+            </ul>
+          </nav>
+        </header>
+        <h1>Multigrid Poisson Test</h1>
+        <canvas id="plate" width="600" height="600"></canvas>
+        <script src="scripts/grids.js"></script>
+		<script src="scripts/main.js"></script>
+        <script type="module">
+			async function start() {
+				if (!navigator.gpu) {
+					fail('this browser does not support WebGPU');
+					return;
+				}
+
+				const adapter = await navigator.gpu.requestAdapter();
+				if (!adapter) {
+					fail('this browser supports webgpu but it appears disabled');
+					return;
+				}
+
+				hasBGRA8unormStorage = adapter.features.has('bgra8unorm-storage');
+				const device = await adapter?.requestDevice({
+					requiredFeatures: hasBGRA8unormStorage
+						? ['bgra8unorm-storage']
+						: [],
+				});
+
+				device.lost.then((info) => {
+					console.error(`WebGPU device was lost: ${info.message}`);
+
+					// 'reason' will be 'destroyed' if we intentionally destroy the device.
+					if (info.reason !== 'destroyed') {
+						// try again
+						start();
+					}
+				});
+
+				main(device);
+			}
+			start();
+
+			async function main(device) {
+				// Get a WebGPU context from the canvas and configure it
+				const context = canvas.getContext('webgpu');
+				const presentationFormat = hasBGRA8unormStorage
+					? navigator.gpu.getPreferredCanvasFormat()
+					: 'rgba8unorm';
+				context.configure({
+					device,
+					format: presentationFormat,
+					usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.STORAGE_BINDING,
+				});
+                
+				const arrayToCanvasDrawModule = device.createShaderModule({
+					label: 'draw to canvas',
+					code: `
+						// This module contains code for drawing to canvas
+						// Invocations are by pixel
+
+						@group(0) @binding(0) var canvasTexture: texture_storage_2d<${presentationFormat}, write>;
+						@group(1) @binding(0) var<storage, read_write> boundary: array<i32>;
+						@group(1) @binding(1) var<storage, read_write> temperature: array<f32>;
+						@group(1) @binding(2) var<storage, read_write> residual: array<f32>;
+						@group(1) @binding(3) var<storage, read> widths: array<u32>;
+
+						@group(1) @binding(4) var<storage, read> cells: array<u32>;
+						@group(1) @binding(5) var<storage, read> offsets: array<u32>;
+						@group(1) @binding(6) var<storage, read> spacings: array<f32>;
+
+						@group(1) @binding(8) var<uniform> viewStage: u32;
+						@group(1) @binding(9) var<uniform> viewMode: u32;
+
+						fn pixelToCellIndex (id : vec3u) -> u32 {
+							let canvasSize = textureDimensions(canvasTexture);
+							let normalizedCoordinate = vec2f(id.xy) / vec2f(canvasSize);
+							let arrayCoordinate = vec2u(floor(normalizedCoordinate * vec2f(f32(widths[viewStage]))));
+							let cellIndex = offsets[viewStage] + arrayCoordinate.x + (arrayCoordinate.y * widths[viewStage]);
+
+							return cellIndex;
+						}
+
+						fn colorFunction (value : f32) -> vec4f {
+                            let normalizedTemperature = value / ${maxTemperature};
+                            let orange = vec3f(1, 0.55, 0);
+							let blue = vec3f(0, 0, 0.19);
+							let color = select((normalizedTemperature) * orange, blue, normalizedTemperature < ${coldThreshold});
+
+							return vec4f(color, 1);
+						}
+
+						fn indexToRedBlack(cellIndex : u32) -> vec4f {
+							let isRed = (boundary[cellIndex] < 0);
+							let color = select(vec4f(0, 0, 0, 1), vec4f(1, 0, 0, 1), isRed);
+
+							return color;
+						}
+
+						fn indexToOrder(cellIndex : u32) -> vec4f {
+							let order = f32(cellIndex - offsets[viewStage]) / f32(cells[viewStage]);
+							let color = vec4f(order, 0, 0, 1);
+
+							return color;
+						}
+
+						fn indexToResidual(cellIndex : u32) -> vec4f {
+                            let purple = vec3f(0.3, 0, 0.5);
+
+							return vec4f(purple * abs(residual[cellIndex]) * ${RESIDUAL_MULTIPLIER}, 1);
+						}
+
+						@compute @workgroup_size(${WORKGROUP_SIZE}, ${WORKGROUP_SIZE})
+						fn arraySampler(@builtin(global_invocation_id) id : vec3u) {
+							let cellIndex = pixelToCellIndex(id);
+							let isInArray = (cellIndex < offsets[viewStage + 1]);
+
+							if (!isInArray) {
+                                return;
+                            }
+
+							switch viewMode {
+								case 0, default {
+									textureStore(canvasTexture, id.xy, colorFunction(temperature[cellIndex]));
+								}
+								case 1 {
+									textureStore(canvasTexture, id.xy, indexToResidual(cellIndex));
+								}
+								case 2 {
+									textureStore(canvasTexture, id.xy, indexToRedBlack(cellIndex));
+								}
+								case 3 {
+									textureStore(canvasTexture, id.xy, indexToOrder(cellIndex));
+								}
+							}
+
+						}
+					`,
+				});
+
+				const gridComputationModule = device.createShaderModule({
+					label: 'perform calculations',
+					code: `
+						// This module contains code for computations
+						// Invocations are by grid cell
+						
+						@group(1) @binding(0) var<storage, read_write> boundary: array<i32>;	
+						@group(1) @binding(1) var<storage, read_write> temperature: array<f32>;
+						@group(1) @binding(2) var<storage, read_write> residual: array<f32>;
+
+						@group(1) @binding(3) var<storage> widths: array<u32>;	
+						@group(1) @binding(4) var<storage> cells: array<u32>;	
+						@group(1) @binding(5) var<storage> offsets: array<u32>;
+						@group(1) @binding(6) var<storage> spacings: array<f32>;
+
+						@group(1) @binding(7) var<storage, read_write> stage: u32;
+
+						fn idToCellIndex (id : vec2u) -> u32 {
+							let cellIndex = offsets[stage] + id.x + id.y * widths[stage];
+
+							return cellIndex;
+						}
+
+						fn gaussSeidel(cellIndex : u32) {
+							let left = temperature[cellIndex - 1];
+							let right = temperature[cellIndex + 1];
+							let above = temperature[cellIndex - widths[stage]]; 
+							let below = temperature[cellIndex + widths[stage]];
+							let averageTemperature = 0.25 * (left + right + above + below);
+							temperature[cellIndex] = averageTemperature;
+						}
+
+						@compute @workgroup_size(${WORKGROUP_SIZE}, ${WORKGROUP_SIZE})
+						fn gaussSeidelRedPass (@builtin(global_invocation_id) id : vec3u) {
+							let cellIndex = idToCellIndex(id.xy);
+							
+							let isInterior = (abs(boundary[cellIndex]) == ${INTERIOR});
+							let isInArray = (cellIndex < offsets[stage + 1]);
+							let isRedPass = (boundary[cellIndex] < 0);
+
+							if (!isRedPass || !isInterior || !isInArray) {
+								return;
+							}
+
+							gaussSeidel(cellIndex);
+						}
+
+						@compute @workgroup_size(${WORKGROUP_SIZE}, ${WORKGROUP_SIZE})
+						fn gaussSeidelBlackPass (@builtin(global_invocation_id) id : vec3u) {
+							let cellIndex = idToCellIndex(id.xy);
+							
+							let isInterior = (abs(boundary[cellIndex]) == ${INTERIOR});
+							let isInArray = (cellIndex < offsets[stage + 1]);
+							let isBlackPass = (boundary[cellIndex] > 0);
+
+							if (!isBlackPass || !isInterior || !isInArray) {
+								return;
+							}
+
+							gaussSeidel(cellIndex);
+						}
+
+						@compute @workgroup_size(${WORKGROUP_SIZE}, ${WORKGROUP_SIZE})
+						fn computeResidual (@builtin(global_invocation_id) id : vec3u) {
+							let cellIndex = idToCellIndex(id.xy);
+							
+							let isInterior = (abs(boundary[cellIndex]) == ${INTERIOR});
+							let isInArray = (cellIndex < offsets[stage + 1]);
+
+							if (!isInterior || !isInArray) {
+								return;
+							}
+
+							let left = temperature[cellIndex - 1];
+							let right = temperature[cellIndex + 1];
+							let above = temperature[cellIndex - widths[stage]]; 
+							let below = temperature[cellIndex + widths[stage]];
+
+							let averageTemperature = 0.25 * (left + right + above + below);
+							let currentTemperature = temperature[cellIndex];
+							
+							residual[cellIndex] = currentTemperature - averageTemperature;
+						}
+
+						fn idToFineIndex(idCoarse : vec2u) -> u32 {
+							// Maps a coarse grid to a 2x finer grid to the top left cell of every 2x2
+							let id = idCoarse * 2;
+							let topLeftFineIndex = id.x + id.y * widths[stage - 1];
+
+							return offsets[stage - 1] + topLeftFineIndex;
+						}
+
+						fn idToCoarseIndex(idFine : vec2u) -> u32 {
+							let id = vec2u(floor(vec2f(idFine) / 2));
+							let coarseIndex = id.x + id.y * widths[stage + 1];
+
+							return offsets[stage + 1] + coarseIndex;
+						}
+						
+						@compute @workgroup_size(${WORKGROUP_SIZE}, ${WORKGROUP_SIZE})
+						fn restrictResidual(@builtin(global_invocation_id) id : vec3u) {
+							// Called once per cell in COARSE grid
+							let cellIndex = idToCellIndex(id.xy);
+
+							let isInterior = (abs(boundary[cellIndex]) == ${INTERIOR});
+							let isInArray = (cellIndex < offsets[stage + 1]);
+
+							if (!isInterior || !isInArray) {
+								return;
+							}
+
+							let topLeftFineIndex = idToFineIndex(id.xy);
+
+							let topLeftResidual = residual[topLeftFineIndex];
+							let topRightResidual = residual[topLeftFineIndex + 1];
+							let bottomLeftResidual = residual[topLeftFineIndex + widths[stage - 1]];
+							let bottomRightResidual = residual[topLeftFineIndex + widths[stage - 1] + 1];
+							
+							let totalResidual = topLeftResidual + topRightResidual + bottomLeftResidual + bottomRightResidual;
+							residual[cellIndex] = totalResidual;
+						}
+
+						@compute @workgroup_size(${WORKGROUP_SIZE}, ${WORKGROUP_SIZE})
+						fn injectResidual(@builtin(global_invocation_id) id : vec3u) {
+							// Called once per cell in FINE grid
+							let cellIndex = idToCellIndex(id.xy);
+
+							let isInterior = (abs(boundary[cellIndex]) == ${INTERIOR});
+							let isInArray = (cellIndex < offsets[stage + 1]);
+
+							if (!isInterior || !isInArray) {
+								return;
+							}
+
+							let coarseIndex = idToCoarseIndex(id.xy);
+							residual[cellIndex] = residual[coarseIndex]; 
+							
+							// The above works way faster when its +=.
+							// In theory it should be =, not +=.
+						}
+
+						fn smoothen(cellIndex : u32) {
+							let left = residual[cellIndex - 1];
+							let right = residual[cellIndex + 1];
+							let above = residual[cellIndex - widths[stage]]; 
+							let below = residual[cellIndex + widths[stage]];
+							let averageResidual = 0.25 * (left + right + above + below);
+							residual[cellIndex] = averageResidual - residual[cellIndex] * pow(f32(spacings[stage]), 2)/4;
+						}
+
+						@compute @workgroup_size(${WORKGROUP_SIZE}, ${WORKGROUP_SIZE})
+						fn smoothRedPass (@builtin(global_invocation_id) id : vec3u) {
+							let cellIndex = idToCellIndex(id.xy);
+							
+							let isInterior = (abs(boundary[cellIndex]) == ${INTERIOR});
+							let isInArray = (cellIndex < offsets[stage + 1]);
+							let isRedPass = (boundary[cellIndex] < 0);
+
+							if (!isRedPass || !isInterior || !isInArray) {
+								return;
+							}
+
+							smoothen(cellIndex);
+						}
+
+						@compute @workgroup_size(${WORKGROUP_SIZE}, ${WORKGROUP_SIZE})
+						fn smoothBlackPass (@builtin(global_invocation_id) id : vec3u) {
+							let cellIndex = idToCellIndex(id.xy);
+							
+							let isInterior = (abs(boundary[cellIndex]) == ${INTERIOR});
+							let isInArray = (cellIndex < offsets[stage + 1]);
+							let isBlackPass = (boundary[cellIndex] > 0);
+
+							if (!isBlackPass || !isInterior || !isInArray) {
+								return;
+							}
+
+							smoothen(cellIndex);
+						}
+
+						@compute @workgroup_size(${WORKGROUP_SIZE}, ${WORKGROUP_SIZE})
+						fn incorporateResidual (@builtin(global_invocation_id) id : vec3u) {
+							let cellIndex = idToCellIndex(id.xy);
+							
+							let isInterior = (abs(boundary[cellIndex]) == ${INTERIOR});
+							let isInArray = (cellIndex < offsets[stage + 1]);
+
+							if (!isInterior || !isInArray) {
+								return;
+							}
+
+							temperature[cellIndex] -= residual[cellIndex];
+						}
+						
+						@compute @workgroup_size(1)  
+						fn incrementStage() {
+							stage = min(stage + 1, ${plate.coarsestStage});
+						}
+
+						@compute @workgroup_size(1)  
+						fn decrementStage() {
+							stage = max(stage - 1, 0);
+						}
+
+						@compute @workgroup_size(${WORKGROUP_SIZE}, ${WORKGROUP_SIZE})
+						fn injectTemperature(@builtin(global_invocation_id) id : vec3u) {
+							// Called once per cell in FINE grid
+							let cellIndex = idToCellIndex(id.xy);
+
+							let isInterior = (abs(boundary[cellIndex]) == ${INTERIOR});
+							let isInArray = (cellIndex < offsets[stage + 1]);
+
+							if (!isInterior || !isInArray) {
+								return;
+							}
+
+							let coarseIndex = idToCoarseIndex(id.xy);
+							temperature[cellIndex] = temperature[coarseIndex];
+						}
+                    `,
+				});
+
+				const drawBindGroupLayout = device.createBindGroupLayout({
+					label: 'storage texture bind group',
+					entries: [{
+						binding: 0,
+						visibility: GPUShaderStage.COMPUTE,
+						storageTexture: { format : presentationFormat }, 
+					}]
+				});
+
+				const computationBindGroupLayout = device.createBindGroupLayout({
+					label: 'compute bind group',
+					entries: [{
+						binding: 0,
+						visibility: GPUShaderStage.COMPUTE,
+						buffer: { type: "storage" },
+					}, {
+						binding: 1,
+						visibility: GPUShaderStage.COMPUTE,
+						buffer: { type: "storage" },
+					}, {
+						binding: 2,
+						visibility: GPUShaderStage.COMPUTE,
+						buffer: { type: "storage" },
+					},{
+						binding: 3,
+						visibility: GPUShaderStage.COMPUTE,
+						buffer: { type: "read-only-storage" },
+					}, {
+						binding: 4,
+						visibility: GPUShaderStage.COMPUTE,
+						buffer: { type: "read-only-storage" },
+					}, {
+						binding: 5,
+						visibility: GPUShaderStage.COMPUTE,
+						buffer: { type: "read-only-storage" },
+					}, {
+						binding: 6,
+						visibility: GPUShaderStage.COMPUTE,
+						buffer: { type: "read-only-storage" },
+					}, {
+						binding: 7,
+						visibility: GPUShaderStage.COMPUTE,
+						buffer: { type: "storage" },
+					}, {
+						binding: 8,
+						visibility: GPUShaderStage.COMPUTE,
+						buffer: { type: "uniform" },
+					}, {
+						binding: 9,
+						visibility: GPUShaderStage.COMPUTE,
+						buffer: { type: "uniform" },
+					}]
+				});
+
+				const pipelineLayout = device.createPipelineLayout({
+					bindGroupLayouts: [
+						drawBindGroupLayout, // @group(0)
+						computationBindGroupLayout // @group(1)
+					]
+				});
+
+				const arrayToCanvasPipeline = device.createComputePipeline({
+					label: 'array to canvas draw pipeline',
+					layout: pipelineLayout,
+					compute: {
+						entryPoint: 'arraySampler',
+						module: arrayToCanvasDrawModule
+					}
+				});
+
+				const gaussSeidelRedPassPipeline = device.createComputePipeline({
+					label: 'gauss seidel red pass computation pipeline',
+					layout: pipelineLayout,
+					compute: {
+						entryPoint: 'gaussSeidelRedPass',
+						module: gridComputationModule
+					}
+				});
+
+				const gaussSeidelBlackPassPipeline = device.createComputePipeline({
+					label: 'gauss seidel black pass computation pipeline',
+					layout: pipelineLayout,
+					compute: {
+						entryPoint: 'gaussSeidelBlackPass',
+						module: gridComputationModule
+					}
+				});
+
+				const residualPipeline = device.createComputePipeline({
+					label: 'residual computation pipeline',
+					layout: pipelineLayout,
+					compute: {
+						entryPoint: 'computeResidual',
+						module: gridComputationModule
+					}
+				});
+
+				const restrictResidualPipeline = device.createComputePipeline({
+					label: 'residual restriction computation pipeline',
+					layout: pipelineLayout,
+					compute: {
+						entryPoint: 'restrictResidual',
+						module: gridComputationModule
+					}
+				});
+
+				const injectResidualPipeline = device.createComputePipeline({
+					label: 'residual injection computation pipeline',
+					layout: pipelineLayout,
+					compute: {
+						entryPoint: 'injectResidual',
+						module: gridComputationModule
+					}
+				});
+
+				const smoothRedPassPipeline = device.createComputePipeline({
+					label: 'smooth red pass computation pipeline',
+					layout: pipelineLayout,
+					compute: {
+						entryPoint: 'smoothRedPass',
+						module: gridComputationModule
+					}
+				});
+
+				const smoothBlackPassPipeline = device.createComputePipeline({
+					label: 'smooth black pass computation pipeline',
+					layout: pipelineLayout,
+					compute: {
+						entryPoint: 'smoothBlackPass',
+						module: gridComputationModule
+					}
+				});
+
+				const incorporateResidualPipeline = device.createComputePipeline({
+					label: 'incorporate residual computation pipeline',
+					layout: pipelineLayout,
+					compute: {
+						entryPoint: 'incorporateResidual',
+						module: gridComputationModule
+					}
+				});
+
+				const incrementStagePipeline = device.createComputePipeline({
+					label: 'increment stage computation pipeline',
+					layout: pipelineLayout,
+					compute: {
+						entryPoint: 'incrementStage',
+						module: gridComputationModule
+					}
+				});
+
+				const decrementStagePipeline = device.createComputePipeline({
+					label: 'decrement stage computation pipeline',
+					layout: pipelineLayout,
+					compute: {
+						entryPoint: 'decrementStage',
+						module: gridComputationModule
+					}
+				});
+
+				const injectTemperaturePipeline = device.createComputePipeline({
+					label: 'temperature injection computation pipeline',
+					layout: pipelineLayout,
+					compute: {
+						entryPoint: 'injectTemperature',
+						module: gridComputationModule
+					}
+				});
+
+				const boundaryArrayStorageBuffer = device.createBuffer({
+					label: `create buffer: boundary type array`,
+					size: plate.gridBytes,
+					usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST,
+				});
+
+				const temperatureArrayStorageBuffer = device.createBuffer({
+					label: `create buffer: temperature array`,
+					size: plate.gridBytes,
+					usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST,
+				});
+
+				const residualArrayStorageBuffer = device.createBuffer({
+					label: `create buffer: residual array`,
+					size: plate.gridBytes,
+					usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST,
+				});
+
+				const widthsArrayUniformBuffer = device.createBuffer({
+					label: `create buffer: widths array`,
+					size: plate.arrayBytes,
+					usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+				});
+
+				const cellsArrayUniformBuffer = device.createBuffer({
+					label: `create buffer: cells array`,
+					size: plate.arrayBytes,
+					usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+				});
+				
+				const offsetsArrayUniformBuffer = device.createBuffer({
+					label: `create buffer: offsets array`,
+					size: plate.arrayBytes + 4, // one extra u32
+					usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+				});
+
+				const spacingsArrayUniformBuffer = device.createBuffer({
+					label: `create buffer: spacings array`,
+					size: plate.arrayBytes,
+					usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+				});
+
+				const computeStageStorageBuffer = device.createBuffer({
+					label: `create buffer: compute stage counter`,
+					size: 4, // its just a u32
+					usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+				});
+
+				const viewStageUniformBuffer = device.createBuffer({
+					label: `create buffer: view stage counter`,
+					size: 4, // its just a u32
+					usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+				});
+
+				const viewModeUniformBuffer = device.createBuffer({
+					label: `create buffer: view mode counter`,
+					size: 4, // its just a u32
+					usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+				});
+
+				const residualMapBuffer = device.createBuffer({
+					label: 'residual map buffer',
+					size: plate.gridBytes,
+					usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST
+				});
+				
+				device.queue.writeBuffer(boundaryArrayStorageBuffer, 0, plate.boundary);
+				device.queue.writeBuffer(temperatureArrayStorageBuffer, 0, plate.temperature);
+				device.queue.writeBuffer(residualArrayStorageBuffer, 0, plate.residual);
+				
+				device.queue.writeBuffer(widthsArrayUniformBuffer, 0, plate.widths);
+				device.queue.writeBuffer(cellsArrayUniformBuffer, 0, plate.cells);
+				device.queue.writeBuffer(offsetsArrayUniformBuffer, 0, plate.offsets);
+				device.queue.writeBuffer(spacingsArrayUniformBuffer, 0, plate.spacings);
+
+				const computationalArraysBindGroup = device.createBindGroup({
+					label: 'computational arrays: storage buffer bind group',
+					layout: computationBindGroupLayout,
+					entries: [
+						{ binding: 0, resource: { buffer: boundaryArrayStorageBuffer } },
+					 	{ binding: 1, resource: { buffer: temperatureArrayStorageBuffer } },
+						{ binding: 2, resource: { buffer: residualArrayStorageBuffer } },
+						{ binding: 3, resource: { buffer: widthsArrayUniformBuffer } },
+						{ binding: 4, resource: { buffer: cellsArrayUniformBuffer } },
+					 	{ binding: 5, resource: { buffer: offsetsArrayUniformBuffer } },
+						{ binding: 6, resource: { buffer: spacingsArrayUniformBuffer } },
+						{ binding: 7, resource: { buffer: computeStageStorageBuffer } },
+						{ binding: 8, resource: { buffer: viewStageUniformBuffer } },
+						{ binding: 9, resource: { buffer: viewModeUniformBuffer } }
+					],
+				});
+
+				const drawCommand = (pass, texture) => {
+					
+					pass.setPipeline(arrayToCanvasPipeline);
+					pass.dispatchWorkgroups(
+						Math.ceil(texture.width / WORKGROUP_SIZE),
+						Math.ceil(texture.height / WORKGROUP_SIZE)
+					);
+
+				}
+
+				const gaussSeidelTemperature = (pass, WORKGROUPS, substeps) => {
+					
+					for (let step = 0; step < substeps; step++) {
+							
+						pass.setPipeline(gaussSeidelRedPassPipeline);
+						pass.dispatchWorkgroups(WORKGROUPS, WORKGROUPS);
+
+						pass.setPipeline(gaussSeidelBlackPassPipeline);
+						pass.dispatchWorkgroups(WORKGROUPS, WORKGROUPS);
+					
+					}
+
+					GAUSS_SEIDEL_COUNTER += substeps;
+					CELL_WORK_COUNTER += (plate.cells[plate.computeStage[0]] * substeps);
+
+				}
+
+				const gaussSeidelResidual = (pass, WORKGROUPS, substeps) => {
+					
+					for (let step = 0; step < substeps; step++) {
+								
+						pass.setPipeline(smoothRedPassPipeline);
+						pass.dispatchWorkgroups(WORKGROUPS, WORKGROUPS);
+
+						pass.setPipeline(smoothBlackPassPipeline);
+						pass.dispatchWorkgroups(WORKGROUPS, WORKGROUPS);
+
+					}
+
+					GAUSS_SEIDEL_COUNTER += substeps;
+					CELL_WORK_COUNTER += (plate.cells[plate.computeStage[0]] * substeps);
+
+				}
+
+				const computeResidual = (pass, WORKGROUPS) => {
+					pass.setPipeline(residualPipeline);
+					pass.dispatchWorkgroups(WORKGROUPS, WORKGROUPS);
+				}
+
+				const restrictResidual = (pass, WORKGROUPS) => {
+					pass.setPipeline(restrictResidualPipeline);
+					pass.dispatchWorkgroups(WORKGROUPS, WORKGROUPS);
+				}
+
+				const injectResidual = (pass, WORKGROUPS) => {
+					pass.setPipeline(injectResidualPipeline);
+					pass.dispatchWorkgroups(WORKGROUPS, WORKGROUPS);
+				}
+
+				const injectTemperature = (pass, WORKGROUPS) => {
+					pass.setPipeline(injectTemperaturePipeline);
+					pass.dispatchWorkgroups(WORKGROUPS, WORKGROUPS);
+				}
+
+				const incorporateResidual = (pass, WORKGROUPS) => {
+					pass.setPipeline(incorporateResidualPipeline);
+					pass.dispatchWorkgroups(WORKGROUPS, WORKGROUPS);
+				}
+
+				const incrementStage = (pass) => {
+					plate.incrementComputeStage();
+					pass.setPipeline(incrementStagePipeline);
+					pass.dispatchWorkgroups(1);
+				}
+
+				const decrementStage = (pass) => {
+					plate.decrementComputeStage();
+					pass.setPipeline(decrementStagePipeline);
+					pass.dispatchWorkgroups(1);
+				}
+
+				const performVCycle = (pass, finestStage, coarsestStage) => {
+					
+					while (plate.computeStage[0] < coarsestStage) { // V cycle down
+
+						let WORKGROUPS = Math.ceil((plate.widths[plate.computeStage[0]]) / WORKGROUP_SIZE);
+
+						switch (plate.computeStage[0]) {
+							
+							case finestStage:
+								gaussSeidelTemperature(pass, WORKGROUPS, V_CYCLE_SMOOTH_STEPS);
+								computeResidual(pass, WORKGROUPS);
+								break;
+							
+							default:
+								restrictResidual(pass, WORKGROUPS);
+								gaussSeidelResidual(pass, WORKGROUPS, V_CYCLE_SMOOTH_STEPS);
+								break;
+						}
+
+						incrementStage(pass);
+
+					}
+
+					{ // Should be at coarsest computeStage here
+						let WORKGROUPS = Math.ceil((plate.widths[plate.computeStage[0]]) / WORKGROUP_SIZE);
+						restrictResidual(pass, WORKGROUPS);
+						gaussSeidelResidual(pass, WORKGROUPS, V_CYCLE_SMOOTH_STEPS);
+						decrementStage(pass);
+					}
+
+					while (plate.computeStage[0] > finestStage) { // V cycle up
+
+						let WORKGROUPS = Math.ceil((plate.widths[plate.computeStage[0]]) / WORKGROUP_SIZE);
+							
+						injectResidual(pass, WORKGROUPS);
+						gaussSeidelResidual(pass, WORKGROUPS, V_CYCLE_SMOOTH_STEPS);
+
+						decrementStage(pass);
+
+					}
+
+					{ // Should be at finest computeStage here
+
+						let WORKGROUPS = Math.ceil((plate.widths[plate.computeStage[0]]) / WORKGROUP_SIZE);
+
+						injectResidual(pass, WORKGROUPS);
+						gaussSeidelResidual(pass, WORKGROUPS, V_CYCLE_SMOOTH_STEPS);
+						incorporateResidual(pass, WORKGROUPS);
+
+						gaussSeidelTemperature(pass, WORKGROUPS, V_CYCLE_SMOOTH_STEPS);
+						computeResidual(pass, WORKGROUPS);
+
+						V_CYCLE_COUNTER++
+						V_CYCLE = LOOP_CYCLE;
+
+					}
+				}
+
+				const performFMGCycle = (pass) => {
+					
+					while (plate.computeStage[0] < plate.coarsestStage) {
+						incrementStage(pass);
+					}
+					
+					// We are now at the COARSEST stage
+
+					{
+						let WORKGROUPS = Math.ceil((plate.widths[plate.computeStage[0]]) / WORKGROUP_SIZE);
+						
+						gaussSeidelTemperature(pass, WORKGROUPS, V_CYCLE_SMOOTH_STEPS);
+						decrementStage(pass);
+
+						WORKGROUPS = Math.ceil((plate.widths[plate.computeStage[0]]) / WORKGROUP_SIZE);
+
+						injectTemperature(pass, WORKGROUPS);
+					}
+
+					// We are now one above the COARSEST stage
+
+					for (let stage = plate.computeStage[0] ; stage > 0; stage--) {
+
+						performVCycle(pass, stage, plate.coarsestStage); // should leave this at FINEST stage that's input
+						decrementStage(pass);
+
+						let WORKGROUPS = Math.ceil((plate.widths[plate.computeStage[0]]) / WORKGROUP_SIZE);
+						
+						injectTemperature(pass, WORKGROUPS);
+					
+					}
+					
+					let WORKGROUPS = Math.ceil((plate.widths[plate.computeStage[0]]) / WORKGROUP_SIZE);
+
+					performVCycle(pass, plate.computeStage[0], plate.coarsestStage);
+				}
+
+				async function render() {
+					const texture = context.getCurrentTexture(); // Set canvas as storage texture
+					const canvasStorageTextureBindGroup = device.createBindGroup({
+						label: 'canvas storage texture bind group',
+						layout: drawBindGroupLayout,
+						entries: [
+							{ binding: 0, resource: texture.createView() }
+						],
+					});
+
+					device.queue.writeBuffer(viewStageUniformBuffer, 0, plate.viewStage);
+					device.queue.writeBuffer(viewModeUniformBuffer, 0, plate.viewMode);
+		
+					const encoder = device.createCommandEncoder({ label: 'compute encoder' });
+					const pass = encoder.beginComputePass();
+					
+					pass.setBindGroup(0, canvasStorageTextureBindGroup);
+					pass.setBindGroup(1, computationalArraysBindGroup);
+
+					if (DRAW) {
+						
+						drawCommand(pass, texture);
+					
+					}
+
+					if (GAUSS_SEIDEL) {
+						
+						let WORKGROUPS = Math.ceil((plate.widths[plate.computeStage[0]]) / WORKGROUP_SIZE);
+
+						gaussSeidelTemperature(pass, WORKGROUPS, GAUSS_SEIDEL_SUBSTEPS);
+						computeResidual(pass, WORKGROUPS);
+
+					}
+
+					if (V_CYCLE) {
+
+						performVCycle(pass, 0, plate.coarsestStage);
+
+					}
+
+					if (FMG_CYCLE) {
+
+						performFMGCycle(pass);
+
+						FMG_CYCLE = false;
+
+					}
+
+					if (F_CYCLE) {
+
+						while (plate.computeStage[0] > 0) {
+							decrementStage(pass);
+						}
+
+						while (plate.computeStage[0] < plate.coarsestStage) { // V cycle down
+
+							let WORKGROUPS = Math.ceil((plate.widths[plate.computeStage[0]]) / WORKGROUP_SIZE);
+
+							switch (plate.computeStage[0]) {
+								
+								case 0:
+									gaussSeidelTemperature(pass, WORKGROUPS, V_CYCLE_SMOOTH_STEPS);
+									computeResidual(pass, WORKGROUPS);
+									break;
+								
+								default:
+									restrictResidual(pass, WORKGROUPS);
+									gaussSeidelResidual(pass, WORKGROUPS, V_CYCLE_SMOOTH_STEPS);
+									break;
+							}
+
+							incrementStage(pass);
+
+						}
+
+						{ // Should be at COARSEST stage
+							let WORKGROUPS = Math.ceil((plate.widths[plate.computeStage[0]]) / WORKGROUP_SIZE);
+							incorporateResidual(pass, WORKGROUPS);
+						}
+
+
+						performFMGCycle(pass);
+
+						F_CYCLE = false;
+
+					}
+
+					if (SMOOTHEN_RESIDUAL) {
+
+						let WORKGROUPS = Math.ceil((plate.widths[plate.computeStage[0]]) / WORKGROUP_SIZE);
+
+						gaussSeidelResidual(pass, WORKGROUPS, 1);
+
+						SMOOTHEN_RESIDUAL = false;
+
+					}
+
+					if (SMOOTHEN_TEMPERATURE) {
+
+						let WORKGROUPS = Math.ceil((plate.widths[plate.computeStage[0]]) / WORKGROUP_SIZE);
+
+						gaussSeidelTemperature(pass, WORKGROUPS, 1);
+
+						SMOOTHEN_TEMPERATURE = false;
+
+					}
+
+					if (COMPUTE_RESIDUAL) {
+						
+						let WORKGROUPS = Math.ceil((plate.widths[plate.computeStage[0]]) / WORKGROUP_SIZE);
+
+						computeResidual(pass, WORKGROUPS);
+
+					}
+
+					pass.end();
+
+					if (COMPUTE_RESIDUAL) {
+
+						encoder.copyBufferToBuffer(residualArrayStorageBuffer, 0, residualMapBuffer, 0, residualMapBuffer.size);
+
+						COMPUTE_RESIDUAL = false;
+						DISPLAY_RESIDUAL = true;
+
+					}
+
+					const commandBuffer = encoder.finish();
+					device.queue.submit([commandBuffer]);
+
+					if (DISPLAY_RESIDUAL) {
+
+						await residualMapBuffer.mapAsync(GPUMapMode.READ);
+						const residual = new Float32Array(residualMapBuffer.getMappedRange().slice());
+						residualMapBuffer.unmap();
+
+						console.log(`1-Norm of Residual: ${residual1Norm(residual)}`);
+						console.log(`2-Norm of Residual: ${residual2Norm(residual)}`);
+						console.log(`Normalized visual cold threshold: ${coldThreshold}`);
+
+						DISPLAY_RESIDUAL = false;
+
+					}
+				}
+				
+				function conditionalRender() {
+					if (!PAUSED) {
+						render();
+					}
+				}
+				
+				setInterval(conditionalRender, UPDATE_INTERVAL)
+
+				const residual2Norm = (residualArray) => {
+					let stage = plate.viewStage[0]; // We want the residual of what we're looking at
+					let offset = plate.offsets[stage];
+					let numCells = plate.cells[stage];
+					let runningSumOfSquares = 0;
+
+					for (let i = 0; i < numCells; i++) {
+						runningSumOfSquares += Math.pow(residualArray[offset + i], 2);
+					}
+
+					let euclideanNorm = Math.sqrt(runningSumOfSquares) / numCells;
+
+					return euclideanNorm;
+				}
+
+				const residual1Norm = (residualArray) => {
+					let stage = plate.viewStage[0]; // We want the residual of what we're looking at
+					let offset = plate.offsets[stage];
+					let numCells = plate.cells[stage];
+					let runningAbsoluteSum = 0;
+
+					for (let i = 0; i < numCells; i++) {
+						runningAbsoluteSum += Math.abs(residualArray[offset + i]);
+					}
+
+					let absoluteNorm = runningAbsoluteSum / numCells;
+
+					return absoluteNorm;
+				}
+
+				const announceVCycles = () => {
+					console.log(`V-Cycles: ${V_CYCLE_COUNTER}`);
+					console.log(`Gauss-Seidel Iterations: ${GAUSS_SEIDEL_COUNTER}`)
+					console.log(`Cells Processed: ${CELL_WORK_COUNTER}`)
+				}
+				
+				document.addEventListener('keydown', event => {
+					switch (event.key) {
+						case 'p': PAUSED = !PAUSED; console.log(`Paused: ${PAUSED}`); break;
+						case 'm': PAUSED = false; render(); PAUSED = true; console.log(`Paused: ${PAUSED}, Frame advanced`); break;
+						case 'i': plate.plateInfo(); break;
+						case 'g': GAUSS_SEIDEL = !GAUSS_SEIDEL; console.log(`Gauss-Seidel: ${GAUSS_SEIDEL}`); break;
+						case 'v': V_CYCLE = true; console.log(`Running a V-Cycle...`); break;
+						case 'b': FMG_CYCLE = true; LOOP_CYCLE = false; console.log(`Running an FMG-Cycle...`); break;
+						case 'f': F_CYCLE = true; LOOP_CYCLE = false; console.log(`Running an F-Cycle...`); break;
+						case 's': SMOOTHEN_RESIDUAL = true; console.log(`Smoothing current residual...`); break;
+						case 't': SMOOTHEN_TEMPERATURE = true; console.log(`Smoothing current temperature...`); break;
+						case 'e': COMPUTE_RESIDUAL = true; console.log(`Computing current residual...`); break;
+						case 'l': LOOP_CYCLE = !LOOP_CYCLE; console.log(`V-Cycle Looping: ${LOOP_CYCLE}`); break;
+						case 'c': announceVCycles(); break;
+						case '1': plate.decrementViewStage(); break;
+						case '2': plate.incrementViewStage(); break;
+						case '3': plate.decrementViewMode(); break;
+						case '4': plate.incrementViewMode(); break;
+					}
+				});
+
+                document.getElementById("mobileFMG").addEventListener('click', event => {
+                    FMG_CYCLE = true; LOOP_CYCLE = false; console.log(`Running an FMG-Cycle...`);
+				});
+
+                document.getElementById("mobileGS").addEventListener('click', event => {
+                    GAUSS_SEIDEL = !GAUSS_SEIDEL; console.log(`Gauss-Seidel: ${GAUSS_SEIDEL}`);
+				});
+
+                document.getElementById("mobileStageDown").addEventListener('click', event => {
+                    plate.decrementViewStage();
+				});
+
+                document.getElementById("mobileStageUp").addEventListener('click', event => {
+                    plate.incrementViewStage();
+				});
+
+                document.getElementById("mobileViewDown").addEventListener('click', event => {
+                    plate.decrementViewMode();
+				});
+
+                document.getElementById("mobileViewUp").addEventListener('click', event => {
+                    plate.incrementViewMode();
+				});
+            }
+        </script>
+        <ul>
+            <li>Controls:</li>
+            <li>P — Toggle pause</li>
+            <li>M — One frame forward</li>
+            <li>I — Console report plate info</li>
+            <li>G — Toggle Gauss-Seidel <button id="mobileGS" type="button">Or click here on mobile</button></li></li>
+            <li>V — Run one V-cycle</li>
+            <li>B — Run one Full Multigrid Cycle <button id="mobileFMG" type="button">Or click here on mobile</button></li>
+            <li>F — Run one F-cycle</li>
+            <li>S — Apply one Gauss-Seidel step to current residual</li>
+            <li>T — Apply one Gauss-Seidel step to current temperature</li>
+            <li>E — Console report current residual</li>
+            <li>L — Toggle multigrid cycle looping</li>
+            <li>C — Console output number of V-cycles, Gauss-Seidel iterations, and total work</li>
+            <li>1 — Decrement view stage (finer grid) <button id="mobileStageDown" type="button">Or click here on mobile</button></li></li>
+            <li>2 — Increment view stage (coarser grid) <button id="mobileStageUp" type="button">Or click here on mobile</button></li></li>
+            <li>3 — Decrement view mode <button id="mobileViewDown" type="button">Or click here on mobile</button></li></li>
+            <li>4 — Increment view mode <button id="mobileViewUp" type="button">Or click here on mobile</button></li></li>
+            <li>View modes: 'Temperature', 'Residual', 'Red Black', 'Ordering'</li>
+        </ul>
+    </body>
+</html>

@@ -55,3 +55,9 @@ header {
 h2 {
   text-align: center;
 }
+
+canvas {
+    margin-left: auto;
+    margin-right: auto;
+    display: block;
+}
