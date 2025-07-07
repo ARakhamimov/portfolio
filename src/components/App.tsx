@@ -33,7 +33,7 @@ function App() {
         <h1 id="Projects">Projects</h1>
         <div className="deck">
             {deck_info.map((projectInfo) => (
-                <Card {...projectInfo} />
+                <Card key={projectInfo.title} {...projectInfo} />
             ))}
         </div>
         <h1 id="About">About</h1>
