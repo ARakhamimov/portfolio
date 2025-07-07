@@ -1,0 +1,85 @@
+.card_buttons,
+.card_buttons *,
+.card_buttons :after,
+.card_buttons :before,
+.card_buttons :after,
+.card_buttons :before {
+    border: 0 solid;
+    box-sizing: border-box;
+}
+.card_buttons .start-button {
+    -webkit-tap-highlight-color: transparent;
+    -webkit-appearance: button;
+    color: #fff;
+    cursor: pointer;
+    font-size: 100%;
+    font-weight: 900;
+    line-height: 1.5;
+    margin: 0;
+    padding: 0;
+    text-transform: uppercase;
+    border-radius: 99rem;
+    border-width: 2px;
+    padding: 0.8rem 3rem;
+}
+
+.card_buttons .video-button {
+    -webkit-tap-highlight-color: transparent;
+    -webkit-appearance: button;
+    color: #fff;
+    cursor: pointer;
+    font-size: 100%;
+    font-weight: 900;
+    line-height: 1.5;
+    margin: 0;
+    padding: 0;
+    text-transform: uppercase;
+    border-radius: 99rem;
+    border-width: 2px;
+    padding: 0.8rem 3rem;
+}
+
+.card_buttons .docs-button {
+    -webkit-tap-highlight-color: transparent;
+    -webkit-appearance: button;
+    color: #fff;
+    cursor: pointer;
+    font-size: 100%;
+    font-weight: 900;
+    line-height: 1.5;
+    margin: 0;
+    padding: 0;
+    text-transform: uppercase;
+    border-radius: 99rem;
+    border-width: 2px;
+    padding: 0.8rem 3rem;
+}
+
+.card_buttons .start-button {
+    background-color: rgba(0, 200, 0, 0.8);
+}
+
+.card_buttons .start-button:hover {
+    background-color: #009600;
+}
+
+.card_buttons .video-button {
+    background-color: rgba(200, 0, 0, 0.8);
+}
+
+.card_buttons .video-button:hover {
+    background-color: #960000;
+}
+
+.card_buttons .docs-button {
+    background-color: rgba(0, 0, 200, 0.8);
+}
+
+.card_buttons .docs-button:hover {
+    background-color: #000096;
+}
+
+.card_buttons {
+    display: flex;
+    flex: 1 1 0;
+}
