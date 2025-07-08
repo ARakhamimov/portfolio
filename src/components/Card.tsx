@@ -1,13 +1,14 @@
 // import placeholderImage from "../assets/placeholder.jpg"
 // import placeholderImage from "../assets/placeholder_noise.png"
 import "../styles/Card.css"
-import Card_Buttons from "./Card_Buttons.tsx";
+import "../styles/Card_Buttons.css"
 
 type cardInfoProps = {
     image: string
     title: string
     field: string
     description: string
+    func: () => void
 }
 
 function Card(cardInfo: cardInfoProps) {
@@ -20,7 +21,11 @@ function Card(cardInfo: cardInfoProps) {
                 <h3 className="card-field">{cardInfo.field}</h3>
             </div>
             <p className="card-description">{cardInfo.description}</p>
-            <Card_Buttons />
+            <div className="card_buttons">
+                <button className="start-button" onClick={cardInfo.func}><span>Start</span></button>
+                {/*<button className="video-button"><span>Video</span></button>*/}
+                {/*<button className="docs-button"><span>Docs</span></button>*/}
+            </div>
         </div>
     </div>
   );
