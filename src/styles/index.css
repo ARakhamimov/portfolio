@@ -60,13 +60,12 @@ h2 {
   text-align: center;
 }
 
-.about_me {
+.short_desc {
   text-align: center;
   display: flex;
-  padding: 0;
-  margin-left: auto;
-  margin-right: auto;
-  width: 70vw;
+  flex: 1 1 0;
+  width: 100%;
+  justify-content: space-evenly;
 }
 
 canvas {
@@ -96,4 +95,44 @@ nav {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+canvas {
+    margin-left: auto;
+    margin-right: auto;
+    display: block;
+    align-self: center;
+    box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.5);
+}
+
+.me {
+  width: 20vw;
+  height: 20vw;
+  box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.5);
+}
+
+.about_me {
+  display: flex;
+  flex: 1 1 0;
+  width: 100%;
+  justify-content: space-evenly;
+  align-items: center;
+  margin-bottom: 10vh;
+}
+
+.about_me_text {
+  text-align: center;
+  width: 60vw;
+}
+
+.email {
+  color: #c80000;
+}
+
+.section {
+  color: #c80000;
+}
+
+.regular_link {
+  font-size: 12px;
 }

@@ -11,7 +11,7 @@ function NavBar(goHome: imTiredOfThis) {
                     Rakhamimov</a></h1>
                     <ul className="nav__links">
                         <li><a href="#Projects" onClick={goHome.goHome}> Projects </a></li>
-                        {/*<li><a href="#About" > About </a></li>*/}
+                        <li><a href="#About" onClick={goHome.goHome}> About </a></li>
                     </ul>
                 </nav>
             </header>
