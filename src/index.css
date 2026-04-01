@@ -1,0 +1,113 @@
+@import "tailwindcss";
+
+@font-face {
+    font-family: "NewCM";
+    src: url("/fonts/NewCM10-Regular.otf") format("opentype");
+    font-display: swap;
+    font-weight: normal;
+    font-style: normal;
+}
+
+@font-face {
+    font-family: "NewCM";
+    src: url("/fonts/NewCM10-Bold.otf") format("opentype");
+    font-display: swap;
+    font-weight: bold;
+    font-style: normal;
+}
+
+@font-face {
+    font-family: "NewCM";
+    src: url("/fonts/NewCM10-Italic.otf") format("opentype");
+    font-display: swap;
+    font-weight: normal;
+    font-style: italic;
+}
+
+@font-face {
+    font-family: "NewCM";
+    src: url("/fonts/NewCM10-BoldItalic.otf") format("opentype");
+    font-display: swap;
+    font-weight: bold;
+    font-style: italic;
+}
+
+@font-face {
+    font-family: "NewCMSans";
+    src: url("/fonts/NewCMSans10-Regular.otf") format("opentype");
+    font-display: swap;
+    font-weight: normal;
+    font-style: normal;
+}
+
+@font-face {
+    font-family: "NewCMSans";
+    src: url("/fonts/NewCMSans10-Bold.otf") format("opentype");
+    font-display: swap;
+    font-weight: bold;
+    font-style: normal;
+}
+
+@font-face {
+    font-family: "NewCMSans";
+    src: url("/fonts/NewCMSans10-Italic.otf") format("opentype");
+    font-display: swap;
+    font-weight: normal;
+    font-style: italic;
+}
+
+@font-face {
+    font-family: "NewCMSans";
+    src: url("/fonts/NewCMSans10-BoldItalic.otf") format("opentype");
+    font-display: swap;
+    font-weight: bold;
+    font-style: italic;
+}
+
+@font-face {
+    font-family: "NewCMMono";
+    src: url("/fonts/NewCMMono10-Regular.otf") format("opentype");
+    font-display: swap;
+    font-weight: normal;
+    font-style: normal;
+}
+
+@font-face {
+    font-family: "NewCMMono";
+    src: url("/fonts/NewCMMono10-Bold.otf") format("opentype");
+    font-display: swap;
+    font-weight: bold;
+    font-style: normal;
+}
+
+@font-face {
+    font-family: "NewCMMono";
+    src: url("/fonts/NewCMMono10-Oblique.otf") format("opentype");
+    font-display: swap;
+    font-weight: normal;
+    font-style: oblique;
+}
+
+@font-face {
+    font-family: "NewCMMono";
+    src: url("/fonts/NewCMMono10-BoldOblique.otf") format("opentype");
+    font-display: swap;
+    font-weight: bold;
+    font-style: oblique;
+}
+
+@theme{
+    --font-serif: "NewCM", "serif";
+    --font-sans: "NewCMSans", "sans-serif";
+    --font-mono: "NewCMMono", "mono";
+}
+
+@keyframes rainbow {
+      100% {
+        filter: hue-rotate(360deg);
+      }
+    }
+
+@theme{
+    --animate-rainbow: rainbow 5s infinite;
+}
