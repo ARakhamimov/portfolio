@@ -96,18 +96,22 @@
     font-style: oblique;
 }
 
-@theme{
-    --font-serif: "NewCM", "serif";
-    --font-sans: "NewCMSans", "sans-serif";
-    --font-mono: "NewCMMono", "mono";
+/* Generic families are CSS keywords and must not be quoted: quoted, they are
+ * read as the name of a family, so the browser looks for a face literally called
+ * "serif", fails, and falls back to its default instead of the generic. "mono"
+ * is not a keyword at all -- the generic is monospace. */
+@theme {
+    --font-serif: "NewCM", serif;
+    --font-sans:  "NewCMSans", sans-serif;
+    --font-mono:  "NewCMMono", monospace;
 }
 
 @keyframes rainbow {
-      100% {
+    100% {
         filter: hue-rotate(360deg);
-      }
     }
+}
 
-@theme{
+@theme {
     --animate-rainbow: rainbow 5s infinite;
 }

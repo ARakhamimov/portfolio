@@ -7,19 +7,17 @@ import Body from "./components/Body.jsx";
 import Footer from "./components/Footer.jsx"
 
 const App = () => {
+    // `href` is optional. A card without one renders a disabled button, so a
+    // placeholder reads as unfinished rather than as broken.
     const deck_info = [
         {
-            imagesrc: "gifs/multigrid_heat_transfer.gif",
-            title: "Multigrid Heat Equation",
-            field: "Transport Phenomena",
-            description: "Solve the 2D steady state heat equation with complex boundary conditions. Compare Gauss-Seidel iteration to Multigrid methods. Implemented with WebGPU!",
+            imagesrc: "/gifs/vizier.gif",
+            title: "Vizier: WebGPU Reactive Flow Simulation",
+            field: "Master's Project — Chemical Engineering",
+            description: "A browser tool for teaching transport phenomena: momentum, heat and chemical species solved together on a staggered grid with multigrid, fast enough to watch a flow develop while you change it. Adding an equation is a specification rather than new solver code, and every approximation the tool makes is reported on screen instead of hidden.",
+            href: "/vizier/",
+            label: "Open the demo",
         },
-        {
-            imagesrc: "gifs/reaction_diffusion.gif",
-            title: "Reaction Diffusion Equation",
-            field: "Transport Phenomena",
-            description: "A reaction-diffusion system is simulated with Gauss-Seidel for diffusion and forward Euler for reaction. Complex boundary conditions can be used and boundary conditions can change mid-simulation. Implemented with WebGPU!",
-        }
     ]
     return (
         <MantineProvider>
