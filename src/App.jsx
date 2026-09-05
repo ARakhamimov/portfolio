@@ -16,7 +16,7 @@ const App = () => {
             field: "Master's Project — Chemical Engineering",
             description: "Produced as the work product of my Master's at The Cooper Union, this is a free, open-source, browser-based tool for real-time simulation and visualization of reactive flows for educational visualization. Solves PDEs using multigrid methods implemented in WebGPU. Implements momentum, heat, and species transfer with a reaction term. CVD-accessible coloring shows hatching on top of colors for added visual context. Sliders and buttons for changing views, simulation parameters, and saving images and videos. Comes with several pre-set cases for common interesting flows.",
             href: "/vizier/",
-            label: "Open the demo",
+            label: "Demo will be made accessible shortly!",
         },
     ]
     return (
