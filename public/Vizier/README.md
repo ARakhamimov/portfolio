@@ -1,0 +1,12 @@
+# Vizier 
+is a WebGPU reactive flow simulator made as part of my Master's thesis at The Cooper Union. The live demo can be found at [allenrakhamimov.com](url), where you can play with a bunch of test cases demonstrating fluid flow, reactions, buoyancy, heat transfer, porous beds, and even some electromagnetics and quantum stuff. There's also a sandbox mode where you can add in your own shapes and set the boundary conditions. The demo is accessible on most modern browsers ("modern" circa October 2026), including mobile devices. Some browsers or devices may require you to go into your settings and enable WebGPU as an experimental feature flag, please do so if you'd like to use this demo on your device. You can also download the Vizier folder onto your machine and just open `index.html`, no server needed, WebGPU is magical like that.
+
+## What's on the page?
+
+The first this you see is the canvas, where the actual simulation is displayed. Below it, you'll find the control panel, with buttons that let you play/pause, reset, change the resolution, capture an image, or record the simulation. Further below that you have viewmode buttons that allow you to change what field you're looking at, with a color key/legend located a little further down the page. There are additional display settings like accessible hatching for colorblind users, directional arrows or streamlines, etc.
+
+On the right (on big screens) or further below (on little screens) you can see the case list. You can click a case to switch to it, and each case usually has different fields to view and sliders to play with. Below that, "Equations Solved" displays the equations fed into the solver for that case, and "Dimensionless Numbers" presents the relevant dimensionless numbers for that case (which are cool to look at as you change the sliders). There's an additional section with "develop readouts" containing the code verification scripts and some other fun numbers
+
+## Code?
+
+If you are so inclined to read the codebase, I've included `map.md` which should give you a high level overview if you're interested in anything in particular. If you feel so inclined to modify this code to do something cool, this repo is under the MIT license, so go crazy (I'm not a lawyer and I don't know the extent to which you can actually "go crazy").

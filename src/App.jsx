@@ -14,9 +14,9 @@ const App = () => {
             imagesrc: "/gifs/vizier.gif",
             title: "Vizier: WebGPU Reactive Flow Simulation",
             field: "Master's Project — Chemical Engineering",
-            description: "Produced as the work product of my Master's at The Cooper Union, this is a free, open-source, browser-based tool for real-time simulation and visualization of reactive flows for educational visualization. Solves PDEs using multigrid methods implemented in WebGPU. Implements momentum, heat, and species transfer with a reaction term. CVD-accessible coloring shows hatching on top of colors for added visual context. Sliders and buttons for changing views, simulation parameters, and saving images and videos. Comes with several pre-set cases for common interesting flows.",
-            href: "/vizier/",
-            label: "Demo will be made accessible shortly!",
+            description: "A free, open-source browser tool, built as my Master's project at The Cooper Union, that simulates reactive flows in real time for teaching. A multigrid solver in WebGPU carries momentum, heat and species transport with reactions, and hatching over the colors keeps every view readable with color-vision deficiency. Preset cases, live sliders and image and video export are built in.",
+            href: "/Vizier/index.html",
+            label: "Go",
         },
     ]
     return (

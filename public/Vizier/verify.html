@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<!-- verify.html, by Allen Rakhamimov.
+     The verification checks in a browser, opened straight from the folder with
+     no server: every check in verify/checks.js, one after another, then the GPU
+     checks (verify/known_answers.js and verify/every_case_runs.js). Each check
+     file registers itself here instead of running, and the page calls it. A
+     check reports passed, failed, or could not run here, since a browser
+     without WebGPU must not look like a broken suite.
+     A first read wants runChecks(), runTestCases() and runCompileTest(). -->
+
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vizier: verification</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="styles/styles.css">
+</head>
+<body class="verifyPage">
+
+<header class="masthead">
+    <a class="back" href="index.html">Back to Vizier</a>
+    <h1>Verification</h1>
+    <p class="lede">Run Vizier's verification checks in your browser.</p>
+</header>
+
+<main class="verifyMain">
+
+<section class="card">
+    <h2>What is this?</h2>
+    <p>This page tests Vizier's code in your browser. Run checks reads what the solver is
+       given: where each value is stored, what each case declares, the shader text each case
+       generates, and the equations the panel prints. It does not run the solver. The other
+       two buttons do, on your GPU.</p>
+    <p>Everything here is code verification, asking whether the code solves the equations it
+       states. Whether those equations describe a real flow is validation, which Vizier does
+       not claim. The colors, hatching and arrows are checked by eye against the legend, and
+       advection, the rate laws and most other terms are tested only by every case running
+       without blowing up.</p>
+
+    <table class="verifyButtons">
+        <tbody>
+            <tr><td><button id="runChecks" type="button">Run checks</button></td>
+                <td>Runs every check in the table below, one at a time, in under twenty seconds.
+                    The page stops responding while a check runs; if the browser asks, choose
+                    to wait.</td></tr>
+            <tr><td><button id="runTestCases" type="button">Test cases</button></td>
+                <td>Needs WebGPU. Runs each case for two seconds of simulated time and fails
+                    any whose fields reach NaN, infinity or a million. It starts with the
+                    magnetic wake at a hundred times its field strength, which has to fail, to
+                    show that a blow-up is caught.</td></tr>
+            <tr><td><button id="runCompileTest" type="button">Compile test</button></td>
+                <td>Needs WebGPU. Compiles every case's shader, then solves two problems with
+                    exact answers, a sine wave of temperature decaying between cold walls and
+                    flow down a straight channel. Each must match to within 0.0001.</td></tr>
+        </tbody>
+    </table>
+    <div id="message" class="empty" role="status" aria-live="polite"></div>
+</section>
+
+<section class="card">
+    <h2>Checks</h2>
+    <div class="verifyScroll">
+        <table class="verifyTable">
+            <thead>
+                <tr><th>check</th><th>covers</th><th class="num">assertions</th>
+                    <th class="num">time</th><th>result</th></tr>
+            </thead>
+            <tbody id="checkRows"></tbody>
+        </table>
+    </div>
+    <p id="checkSummary" class="verifySummary"></p>
+    <details id="keyNumbers" class="verifyDetails" hidden>
+        <summary>Key numbers</summary>
+        <p class="note">Numbers the checks assert, shown so they can be read as well as
+           passed.</p>
+        <pre id="keyNumbersBody"></pre>
+    </details>
+</section>
+
+<section class="card">
+    <h2>GPU test output</h2>
+    <pre id="gpuOut" class="verifyLog"></pre>
+</section>
+
+</main>
+
+<script src="scripts/manifest.js"></script>
+<script src="verify/checks.js"></script>
+<script src="verify/known_answers.js"></script>
+<script src="verify/every_case_runs.js"></script>
+<script>
+(() => {
+    'use strict';
+
+    const message = document.getElementById('message');
+    const buttons = ['runChecks', 'runTestCases', 'runCompileTest']
+        .map((id) => document.getElementById(id));
+
+    function say(text, isError = false) {
+        message.textContent = text;
+        message.classList.toggle('error', isError);
+        message.classList.toggle('empty', !text);
+    }
+
+    function setBusy(busy) {
+        for (const button of buttons) button.disabled = busy;
+    }
+
+    // Lets the browser paint before the next check takes the page over.
+    const breathe = () => new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve, 0)));
+
+    // Loading
+    //
+    // A script that fails to parse still fires its load event, so errors are
+    // caught on the window while loading. Two scripts declaring the same
+    // top-level name is exactly such an error, and this is where it shows.
+    const loadErrors = [];
+    // Opened as a file, the browser withholds the details and reports only
+    // "Script error.", so the message then points at the console, which names
+    // the file and the line.
+    const onLoadError = (event) => loadErrors.push(event.filename
+        ? `${event.filename}: ${event.message}`
+        : `${event.message} The browser console names the file. The usual cause is two ` +
+          'scripts declaring the same top-level name.');
+
+    function loadScripts(paths) {
+        return paths.reduce((chain, path) => chain.then(() => new Promise((resolve, reject) => {
+            const element = document.createElement('script');
+            element.src = path;
+            element.async = false;
+            element.onload = resolve;
+            element.onerror = () => reject(new Error(`could not load ${path}`));
+            document.head.appendChild(element);
+        })), Promise.resolve());
+    }
+
+    // The checks
+    const CHECKS = VERIFY_CHECKS;
+    const GROUPS = VERIFY_STAGE_GROUPS;
+    const rows = new Map();
+
+    function cell(row, text, className) {
+        const td = document.createElement('td');
+        td.textContent = text;
+        if (className) td.className = className;
+        row.append(td);
+        return td;
+    }
+
+    function drawRows(selected) {
+        const body = document.getElementById('checkRows');
+        body.replaceChildren();
+        rows.clear();
+        for (const group of GROUPS) {
+            const members = CHECKS.filter((g) => group.stages.includes(g.stage));
+            if (!members.length) continue;
+            const heading = document.createElement('tr');
+            heading.className = 'verifyGroup';
+            const th = document.createElement('th');
+            th.colSpan = 5;
+            const title = document.createElement('strong');
+            title.textContent = group.title;
+            th.append(title, ` ${group.text}`);
+            heading.append(th);
+            body.append(heading);
+
+            for (const check of members) {
+                const row = document.createElement('tr');
+                const name = cell(row, check.file.replace(/\.js$/, ''), 'checkName');
+                cell(row, check.what, 'covers');
+                const checks = cell(row, '', 'num');
+                const time = cell(row, '', 'num');
+                const result = cell(row, selected.includes(check) ? 'waiting' : 'not run', 'dim');
+                body.append(row);
+
+                // The check's whole output, in a row of its own, opened on demand.
+                const outputRow = document.createElement('tr');
+                outputRow.className = 'checkOutput';
+                outputRow.hidden = true;
+                const outputCell = document.createElement('td');
+                outputCell.colSpan = 5;
+                const pre = document.createElement('pre');
+                outputCell.append(pre);
+                outputRow.append(outputCell);
+                body.append(outputRow);
+
+                const toggle = document.createElement('button');
+                toggle.type = 'button';
+                toggle.className = 'outputToggle';
+                toggle.textContent = 'output';
+                toggle.disabled = true;
+                toggle.setAttribute('aria-expanded', 'false');
+                toggle.addEventListener('click', () => {
+                    outputRow.hidden = !outputRow.hidden;
+                    toggle.setAttribute('aria-expanded', String(!outputRow.hidden));
+                });
+                name.append(' ', toggle);
+
+                rows.set(check.file, { checks, time, result, pre, toggle });
+            }
+        }
+    }
+
+    // One check, run to completion. The checks share the page, so anything a
+    // check leaves set in the application's state (the case, the texture format)
+    // is put back before the next one.
+    function runCheck(check, restore) {
+        const lines = [];
+        const original = { log: console.log, info: console.info, warn: console.warn, error: console.error };
+        const capture = (...args) => lines.push(args.map(String).join(' '));
+        console.log = console.info = console.warn = console.error = capture;
+        const process = { exitCode: undefined, argv: [], env: {} };
+        const started = performance.now();
+        let failure;
+        try {
+            const body = verifyCheckBody(check.file);
+            if (!body) throw new Error(`verify/${check.file} did not register itself`);
+            body(process);
+        } catch (error) {
+            failure = error;
+            lines.push(`${error.name}: ${error.message}`);
+            if (error.stack) lines.push(error.stack);
+        } finally {
+            Object.assign(console, original);
+            restore();
+        }
+        const output = lines.join('\n') + '\n';
+        return verifyFinishCheck(check, failure ? null : (process.exitCode || 0), failure, output,
+            (performance.now() - started) / 1000);
+    }
+
+    function showResult(result) {
+        const row = rows.get(result.check.file);
+        row.checks.textContent = result.checks === null ? '-' : String(result.checks);
+        row.time.textContent = `${result.seconds.toFixed(1)} s`;
+        row.result.textContent = result.passed ? 'passed' : (result.crashed ? 'CRASHED' : 'FAILED');
+        row.result.className = result.passed ? 'on' : 'fail';
+        row.pre.textContent = result.output;
+        row.toggle.disabled = false;
+    }
+
+    async function runChecks() {
+        const selected = CHECKS;
+
+        setBusy(true);
+        drawRows(selected);
+        document.getElementById('checkSummary').textContent = '';
+        document.getElementById('keyNumbers').hidden = true;
+        const presetId = appActivePreset().id;
+        const format = pipelineFormat();
+        const restore = () => { appSelectPreset(presetId); setPipelineFormat(format); };
+        const started = performance.now();
+
+        const results = [];
+        try {
+            for (const [index, check] of selected.entries()) {
+                rows.get(check.file).result.textContent = 'running';
+                say(`Running ${check.file.replace(/\.js$/, '')}, ${index + 1} of ${selected.length}…`);
+                await breathe();
+                const result = runCheck(check, restore);
+                results.push(result);
+                showResult(result);
+            }
+        } finally {
+            setBusy(false);
+        }
+
+        const failed = results.filter((r) => !r.passed);
+        const checks = results.reduce((sum, r) => sum + (r.checks || 0), 0);
+        const wall = (performance.now() - started) / 1000;
+        document.getElementById('checkSummary').textContent =
+            `${checks} assertions across ${results.length} checks, ${wall.toFixed(1)} s.`;
+
+        const numbers = [];
+        for (const result of results) {
+            const lines = verifyHighlights(result.check, result.output);
+            if (!lines.length) continue;
+            numbers.push(result.check.file, ...lines.map((line) => `  ${line.trimEnd()}`), '');
+        }
+        document.getElementById('keyNumbersBody').textContent = numbers.join('\n');
+        document.getElementById('keyNumbers').hidden = numbers.length === 0;
+
+        say(failed.length === 0
+            ? `All ${results.length} passed.`
+            : `${failed.length} of ${results.length} FAILED: ${failed.map((r) => r.check.file).join(', ')}. `
+              + 'Open a row\'s output to see which assertion.', failed.length > 0);
+    }
+
+    // The GPU half
+    const gpuOut = document.getElementById('gpuOut');
+
+    function log(line) {
+        const text = String(line);
+        const span = document.createElement('span');
+        // Cannot-run and skipped are the third outcome, neither pass nor fail,
+        // and are set as a neutral note: a warning color reads as a problem
+        // with the code, and there is none.
+        if (text.startsWith('CANNOT RUN HERE') || text.includes('skipped')) span.className = 'noteText';
+        else if (text.includes('FAIL')) span.className = 'fail';
+        else if (/^  PASS| ok\b|^All generated|compiles(, pipelines built)?$|validated; |, 0 undefined$/.test(text)) span.className = 'on';
+        span.textContent = text + '\n';
+        gpuOut.append(span);
+    }
+
+    // Every case, compiled on this device, with pipelines for one case per
+    // equation system (why, at the loop below). A shader the GPU rejects reaches
+    // a viewer as a blank canvas, and Run checks, which compiles no WGSL, cannot
+    // see it. Built at 128 cells: the shader's structure does not depend on the
+    // resolution, and a small plate keeps the loop quick.
+    async function compileEveryCase(device) {
+        log('EVERY CASE COMPILES ON THIS GPU');
+        const format = pipelineFormat();
+        setPipelineFormat('rgba8unorm');
+        const stand = device.createTexture({
+            size: [1, 1], format: 'rgba8unorm', usage: GPUTextureUsage.STORAGE_BINDING,
+        });
+        // Every preset's WGSL is validated, which reports every error in the
+        // language itself. Building pipelines adds the check against the
+        // pipeline layout, which every case shares, and the compile to the GPU's
+        // native code, which is the slow part (up to about a hundred entry points
+        // a case). What that compile sees changes with the terms the equations
+        // carry, so pipelines are built for the first preset of each distinct
+        // equation system, asynchronously so the page stays responsive.
+        let failures = 0;
+        const original = appActivePreset().id;
+        const systemsBuilt = new Set();
+        const started = performance.now();
+        let validated = 0;
+        try {
+            for (const preset of casePresets()) {
+                appSelectPreset(preset.id);
+                const plate = new Plate(3, appCoarsestInterior());
+                appGeometry(plate);
+                const system = appSystem();
+                const source = buildSimulationSource(plate, system, appBoundaryTable(), appWorkgroup, appActivePreset().display);
+                const key = panelEquationText(system).join('\n');
+                const buildPipelines = !systemsBuilt.has(key);
+                device.pushErrorScope('validation');
+                const module = device.createShaderModule({ code: source, label: preset.id });
+                const info = await module.getCompilationInfo();
+                const errors = info.messages.filter((m) => m.type === 'error');
+                let buffers = null;
+                if (buildPipelines && !errors.length) {
+                    systemsBuilt.add(key);
+                    try {
+                        buffers = createSimulationBuffers(device, plate);
+                        const groups = createSimulationBindGroup(device, buffers, stand.createView());
+                        await createSimulationPipelinesAsync(device, module, groups.pipelineLayout, source);
+                    } catch (error) {
+                        errors.push({ lineNum: '-', message: error.message });
+                    }
+                }
+                const invalid = await device.popErrorScope();
+                if (buffers) for (const buffer of Object.values(buffers)) buffer.destroy();
+                validated++;
+                if (errors.length || invalid) {
+                    failures++;
+                    log(`  FAIL  ${preset.id}: ` + (errors.length
+                        ? errors.slice(0, 3).map((m) => `line ${m.lineNum}: ${m.message}`).join('; ')
+                        : invalid.message));
+                } else {
+                    log(`  ${preset.id} ${buildPipelines ? 'compiles, pipelines built' : 'compiles'}`);
+                }
+            }
+            log(`  ${validated} presets validated; pipelines built for ${systemsBuilt.size}, one per `
+                + `distinct equation system, in ${((performance.now() - started) / 1000).toFixed(1)} s.`);
+        } finally {
+            appSelectPreset(original);
+            setPipelineFormat(format);
+            stand.destroy();
+        }
+        return failures;
+    }
+
+    // Every file-prefixed function page.js calls must exist once the scripts are
+    // loaded the way the app loads them. It needs page.js's text, which a page
+    // served from a site can read and a page opened as a file cannot, and then
+    // it says so.
+    async function checkPageCalls() {
+        log('');
+        log('EVERY FUNCTION THE APP PAGE CALLS BY FILE PREFIX IS DEFINED');
+        let page;
+        try {
+            page = await (await fetch('scripts/page/page.js')).text();
+        } catch (error) {
+            log('  skipped: a page opened as a file cannot read page.js. The page served\n'
+                + '  from a site (the published copy, or a local server) makes this check.');
+            return 0;
+        }
+        const called = verifyPrefixedCalls(page);
+        let missing = 0;
+        for (const name of called) {
+            const kind = (0, eval)(`typeof ${name}`);
+            if (kind !== 'function') {
+                log(`  FAIL  page.js calls ${name}(), which no application script defines`);
+                missing++;
+            }
+        }
+        log(`  ${called.length} prefixed calls, ${missing} undefined`);
+        return missing;
+    }
+
+    async function runCompileTest() {
+        setBusy(true);
+        gpuOut.replaceChildren();
+        say('Running the GPU checks…');
+        try {
+            let failed = 0;
+            let ran = false;
+            if (!navigator.gpu) {
+                log('CANNOT RUN HERE: this browser exposes no WebGPU, so the shader checks '
+                    + 'cannot run. That is not a failure of the suite.');
+            } else {
+                const adapter = await navigator.gpu.requestAdapter();
+                if (!adapter) {
+                    log('CANNOT RUN HERE: WebGPU is present but returned no adapter.');
+                } else {
+                    const device = await adapter.requestDevice();
+                    failed += await compileEveryCase(device);
+                    log('');
+                    failed += await checkKnownAnswers(device, log);
+                    device.destroy();
+                    ran = true;
+                }
+            }
+            failed += await checkPageCalls();
+            say(failed > 0 ? `${failed} GPU check(s) FAILED; see below.`
+                : ran ? 'Every GPU check passed.'
+                : 'The shader checks could not run in this browser; see below.', failed > 0);
+        } catch (error) {
+            log(`FAIL: ${error.message}`);
+            say(`The GPU checks stopped: ${error.message}`, true);
+        } finally {
+            setBusy(false);
+        }
+    }
+
+    async function runTestCases() {
+        setBusy(true);
+        gpuOut.replaceChildren();
+        say('Running every case on the GPU…');
+        try {
+            const adapter = navigator.gpu && await navigator.gpu.requestAdapter();
+            if (!adapter) {
+                log('CANNOT RUN HERE: this browser gives no WebGPU adapter, so the cases cannot run. '
+                    + 'That is not a failure of the suite.');
+                say('The cases could not run in this browser; see below.');
+                return;
+            }
+            const device = await adapter.requestDevice({ requiredLimits: {
+                maxStorageBufferBindingSize: adapter.limits.maxStorageBufferBindingSize,
+                maxBufferSize: adapter.limits.maxBufferSize,
+            } });
+            const failed = await checkEveryCaseRuns(device, log);
+            device.destroy();
+            say(failed > 0 ? `${failed} FAILED; see below.` : 'All cases passed.', failed > 0);
+        } catch (error) {
+            log(`FAIL: ${error.message}`);
+            say(`The run stopped: ${error.message}`, true);
+        } finally {
+            setBusy(false);
+        }
+    }
+
+    // Wiring
+    setBusy(true);
+    window.addEventListener('error', onLoadError);
+    loadApplicationScripts()
+        .then(() => loadScripts(CHECKS.map((g) => `verify/${g.file}`)))
+        .then(() => {
+            window.removeEventListener('error', onLoadError);
+            drawRows([]);
+            if (loadErrors.length) {
+                say(`A script failed to load, so nothing here can be trusted: ${loadErrors.join('; ')}`, true);
+                return;
+            }
+            setBusy(false);
+            document.getElementById('runChecks').addEventListener('click', runChecks);
+            document.getElementById('runCompileTest').addEventListener('click', runCompileTest);
+            document.getElementById('runTestCases').addEventListener('click', runTestCases);
+        })
+        .catch((error) => say(`Could not load the scripts: ${error.message}`, true));
+})();
+</script>
+</body>
+</html>

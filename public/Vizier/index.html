@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<!-- index.html, by Allen Rakhamimov.
+     The page's markup: the canvas, the control bar and the panel. What runs it
+     is scripts/page/page.js. -->
+
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vizier: reactive flow</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="styles/styles.css">
+</head>
+<body>
+
+<header class="masthead">
+    <a id="back" class="back" href="../">Back to portfolio</a>
+    <h1>Vizier</h1>
+    <p class="lede">Coupled momentum, heat and species transport with reaction, solved on your GPU.</p>
+</header>
+
+<main>
+
+<div id="stage">
+    <!-- The sandbox's crosshair and half-drawn shape; it takes no pointer
+         events, so the canvas gets every one. -->
+    <div id="plateFrame" class="plateFrame">
+        <canvas id="plate" width="1024" height="1024"></canvas>
+        <svg id="buildOverlay" class="buildOverlay" viewBox="0 0 1 1" preserveAspectRatio="none"
+             aria-hidden="true"></svg>
+    </div>
+
+    <div id="message" class="empty" role="status" aria-live="polite"></div>
+
+    <div class="controlbar">
+        <!-- A button that does something is sentence case (Pause, Accessible
+             hatching); one that names a thing to show carries that thing's own
+             lowercase name, from VIEW_NAMES or FIELD_SPEC. The resolution
+             costs a rebuild, so it is the one select in a bar of buttons; the
+             level shown is free to move through, so it is a row. -->
+        <span class="caption" id="runCaption">Run</span>
+        <div class="segmented" role="group" aria-labelledby="runCaption">
+            <button id="pause" type="button" aria-pressed="false">Pause</button>
+            <button id="reset" type="button">Reset</button>
+            <span class="divider" aria-hidden="true"></span>
+            <label class="selectRow" for="resolution">Simulation resolution</label>
+            <select id="resolution"></select>
+        </div>
+
+        <span class="caption" id="coefficientCaption">Coefficients</span>
+        <div class="sliderStack" id="coefficients"></div>
+
+        <span class="caption" id="captureCaption">Capture</span>
+        <div class="segmented" role="group" aria-labelledby="captureCaption">
+            <button id="snapshot" type="button">Save image</button>
+            <button id="record" type="button" aria-pressed="false">Record</button>
+            <span id="recordReadout" class="readout"></span>
+        </div>
+
+        <!-- Three groups: running the case, what to show, how to draw it. -->
+        <hr class="groupRule">
+
+        <span class="caption" id="levelCaption">Cells shown</span>
+        <div class="segmented" id="viewLevels" role="group" aria-labelledby="levelCaption"></div>
+
+        <span class="caption" id="viewCaption">Show</span>
+        <div class="segmented" id="viewModes" role="group" aria-labelledby="viewCaption"></div>
+        <p class="caution" role="note"><strong>Warning: flashing images.</strong> Pressure,
+           divergence and residual redraw on a scale that follows the solver, so they flicker
+           while a case starts and shimmer once it settles. Pause the run before switching to
+           them if you are sensitive to flashing.</p>
+
+        <span class="caption" id="speciesCaption">Species shown</span>
+        <div class="segmented" id="speciesShown" role="group" aria-labelledby="speciesCaption"></div>
+        <span class="caption" id="materialCaption">Material shown</span>
+        <div class="segmented" id="materialShown" role="group" aria-labelledby="materialCaption"></div>
+        <span class="caption" id="residualCaption">Residual of</span>
+        <div class="segmented" id="residualFields" role="group" aria-labelledby="residualCaption"></div>
+
+        <hr class="groupRule">
+
+        <span class="caption" id="displayCaption">Display</span>
+        <div class="segmented" role="group" aria-labelledby="displayCaption">
+            <button id="accessible" type="button" aria-pressed="false">Accessible hatching</button>
+            <button id="bilinear" type="button" aria-pressed="true">Bilinear smoothing</button>
+            <button id="arrows" type="button" aria-pressed="false">Direction arrows</button>
+            <button id="streamlines" type="button" aria-pressed="false">Streamlines</button>
+            <button id="equipotentials" type="button" aria-pressed="true">Equipotentials</button>
+        </div>
+
+        <!-- Built from diagnosticsVisionNames, the table Save image applies. -->
+        <span class="caption" id="visionCaption">Simulated vision</span>
+        <div class="segmented" id="visionRow" role="group" aria-labelledby="visionCaption"></div>
+
+        <span class="caption" id="hatchCaption">Hatch</span>
+        <div class="sliderRow">
+            <input id="hatchPitch" type="range" min="6" max="32" step="1" value="14"
+                   aria-label="hatch period in screen pixels">
+            <span id="hatchPitchReadout" class="readout">14 px</span>
+            <input id="hatchDepth" type="range" min="0.1" max="0.8" step="0.05" value="0.45"
+                   aria-label="hatch depth">
+            <span id="hatchDepthReadout" class="readout">0.45</span>
+        </div>
+
+        <span class="caption" id="arrowCaption">Arrow spacing</span>
+        <div class="sliderRow">
+            <input id="arrowPitch" type="range" min="18" max="72" step="2" value="34"
+                   aria-labelledby="arrowCaption">
+            <span id="arrowPitchReadout" class="readout">34 px</span>
+        </div>
+
+        <span class="caption" id="contourCaption">Contour lines</span>
+        <div class="sliderRow">
+            <input id="contourCount" type="range" min="4" max="48" step="2" value="16"
+                   aria-labelledby="contourCaption">
+            <span id="contourCountReadout" class="readout">16 lines</span>
+        </div>
+
+        <span class="caption" id="cutoffCaption">Slow-flow cutoff</span>
+        <div class="sliderRow">
+            <input id="velocityCutoff" type="range" min="0" max="0.25" step="0.01" value="0"
+                   aria-labelledby="cutoffCaption">
+            <span id="velocityCutoffReadout" class="readout">off</span>
+        </div>
+
+    </div>
+
+    <div id="legend" class="legend"></div>
+</div>
+
+<aside id="panel">
+    <section class="card">
+        <h2>Case</h2>
+        <div class="segmented" id="presetCategories" role="group" aria-label="Jump to a group of cases"></div>
+        <div id="presets"></div>
+        <span class="caption" id="reactionCaption">Reaction</span>
+        <div class="segmented" id="presetReactions" role="group" aria-labelledby="reactionCaption"></div>
+        <p class="note" id="reactionNote" aria-live="polite"></p>
+    </section>
+
+    <section class="card" id="buildCard" hidden>
+        <h2>Build</h2>
+        <div id="build" class="build"></div>
+    </section>
+
+    <section class="card">
+        <h2>Equations solved</h2>
+        <div id="equations" class="equations"></div>
+    </section>
+
+    <section class="card">
+        <h2>Dimensionless numbers</h2>
+        <table id="caseState"></table>
+    </section>
+
+    <section class="card">
+        <h2>Keys</h2>
+        <table id="keyState"></table>
+    </section>
+
+    <details id="dev" class="card">
+        <summary>Developer readouts</summary>
+        <div class="devBody">
+            <p class="note"><a href="verify.html">Open the checks</a> to run them in this
+               browser.</p>
+
+            <h3>Case</h3>
+            <table id="caseDetail"></table>
+
+            <h3>View</h3>
+            <table id="viewState"></table>
+
+            <h3>Solver</h3>
+            <table id="solverState"></table>
+
+            <h3>Peak speed per level</h3>
+            <table id="levelState"></table>
+
+            <h3>Export</h3>
+            <div id="diagnostics">
+                <button id="exportRun" type="button">Export run</button>
+            </div>
+        </div>
+    </details>
+</aside>
+
+</main>
+
+<script>
+// The back link means something only when the page is served from a
+// subdirectory of a site, so it removes itself otherwise. It is markup a script
+// removes, not the reverse, so it still works with scripting off.
+(function () {
+    const link = document.getElementById('back');
+    if (!link) return;
+    const servedFromSubdirectory = /^https?:$/.test(location.protocol)
+        && location.pathname.replace(/\/+$/, '').lastIndexOf('/') > 0;
+    if (!servedFromSubdirectory) link.remove();
+}());
+</script>
+
+<script src="recording-library/mp4-muxer.js"></script>
+<script src="scripts/manifest.js"></script>
+<script src="scripts/page/page.js"></script>
+</body>
+</html>
