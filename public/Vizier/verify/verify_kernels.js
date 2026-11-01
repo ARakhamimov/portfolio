@@ -155,10 +155,9 @@ function checkSetFollowsSpec() {
     check('a steady field does not',
         !baseEntries.has('shiftHistory_xVelocity') && !baseEntries.has('shiftHistory_pressure'));
 
-    // The coarse operator carries (u - uOld)/dt as the fine one does, so the
-    // previous time level has to reach the coarse levels too. A coarse level
-    // whose uOld was never written corrects against a different equation, a
-    // little wrong every cycle, and nothing here runs a cycle to see it.
+    // The coarse operator carries (u - uOld)/dt as the fine one does; a coarse
+    // uOld never written corrects against a different equation, a little wrong
+    // every cycle.
     check('an unsteady field restricts its history to the coarse levels',
         unsteadyEntries.has('restrictHistory_xVelocity'),
         'the coarse time derivative would read a history nothing ever wrote');
@@ -251,10 +250,9 @@ function checkEveryCallResolves(system) {
 
 // 3. Every array a kernel names is allocated
 //
-// The emitters take array names as strings, so a kernel could name
-// centerWorkspace.speciesAOperator with nothing noticing that FIELD_SPEC
-// allocates no such array. On the GPU that is a compile error at best and a
-// read of the wrong field at worst.
+// The emitters take array names as strings, so a kernel could name an array
+// FIELD_SPEC never allocates: a compile error at best, a read of the wrong
+// field at worst.
 
 function checkArraysExist(system) {
     heading('EVERY ARRAY A KERNEL NAMES IS ALLOCATED');
@@ -289,10 +287,8 @@ function checkBounds(system) {
 
     const code = makeKernelCode(system, NAMES, WORKGROUP, 5);
     const index = makeIndexCode();
-    // Every kernel opens with the named test for its own location, and the test
-    // is defined once, in the index code. Both halves are checked: the kernel
-    // calls the right test, and the test holds the right extent. N cells have N
-    // + 1 faces, so a face's own normal axis runs one further.
+    // Both halves: the kernel calls its location's test, and the test holds the
+    // right extent (N cells have N + 1 faces along a face's normal).
     const names = { [CENTER]: 'Center', [XFACE]: 'XFace', [YFACE]: 'YFace' };
     const extents = {
         [CENTER]: 'column <= grid.interior[level] && row >= 1u && row <= grid.interior[level]',
@@ -328,13 +324,9 @@ function checkBounds(system) {
 }
 
 // 5. Dispatch extent is a property of the kernel
-//
-// A margin kernel indexes straight from the invocation id and expects to be
-// launched over the whole array; an interior kernel tests against the interior
-// extent. Launched at the interior extent, a margin kernel leaves the outermost
-// rows and columns unwritten, with no error and no NaN: the band stops updating
-// and reads as a physical bias. The emitter declares which kernels are margin
-// kernels and the frame loop reads the declaration; this checks the two agree.
+
+// Launched at the interior extent, a margin kernel leaves the outer band
+// unwritten with no error, which reads as a physical bias.
 
 function checkMarginKernels(system) {
     heading('MARGIN KERNELS ARE DECLARED, NOT GUESSED');
@@ -392,10 +384,8 @@ function checkSpeedScan() {
 
 // 7. Location-aware emission
 //
-// A term that branches on its row's location gets the location from the emit
-// context, and advection's default branch is the center's. A face row given the
-// center branch is still valid WGSL, at the wrong points, so the emitted text
-// is checked directly.
+// A face row given advection's default center branch is still valid WGSL, at
+// the wrong points, so the emitted text is checked directly.
 
 function checkLocationAwareEmission() {
     heading('EMITTED TERMS SEE THE FIELD\'S LOCATION');
@@ -430,10 +420,9 @@ function checkLocationAwareEmission() {
 function checkReactionTerms() {
     heading('A REACTION SPANS THREE EQUATIONS');
 
-    // The sink is linear in its own field once the partner is held fixed, so
-    // its diagonal is the rate times the partner, never zero for a positive
-    // partner. The source reads neither its own field nor its neighbors, so it
-    // adds nothing to the diagonal.
+    // The sink's diagonal is the rate times the partner, never zero for a
+    // positive partner; the source reads neither its own field nor its
+    // neighbors, so it adds nothing.
     const diagonalOf = (code, field) => {
         const start = code.indexOf(`fn diagonal_${field}`);
         return start < 0 ? '' : code.slice(start, code.indexOf('}', start));
@@ -503,10 +492,8 @@ function checkTimeDerivativeOwnership() {
 
 // 10. The constraint row's step reads all four faces
 //
-// relaxConstraint_ takes its Schur step per point from the momentum diagonal of
-// the four faces around the cell, each where it is. A step read from fewer
-// faces, or from one face twice, still converges on a uniform case; on a
-// contrast it diverges.
+// A step read from fewer faces, or from one face twice, still converges on a
+// uniform case; on a contrast it diverges.
 function checkSchurFaces(system) {
     heading('THE CONSTRAINT STEP READS ALL FOUR FACES');
     const source = assembleAppSource(system);

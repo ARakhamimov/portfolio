@@ -39,12 +39,9 @@ function heading(text) {
     console.log('-'.repeat(text.length));
 }
 
-// Comparing the three rate laws rests on the three presets being identical in
-// geometry, feed, mesh and coefficients. If they reported different Damkohler
-// numbers, a viewer would conclude the rate law moved the balance between
-// chemistry and transport when it did not. Monod declares a growth rate and
-// consumes substrate at rate over yield, so the panel's number is not the
-// constant the preset declares.
+// Different Damkohler numbers would tell a viewer the rate law moved the
+// balance between chemistry and transport when it did not. Monod's number is
+// its growth rate over its yield, not the constant the preset declares.
 function checkPresetDamkohler() {
     heading('EVERY CASE OFFERING THE RATE LAWS REPORTS ONE DAMKOHLER');
 

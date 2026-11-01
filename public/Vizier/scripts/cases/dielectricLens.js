@@ -13,8 +13,8 @@ caseRegister(() => {
         id: 'dielectricLens',
         label: 'Dielectric lens',
         view: 'potential',
-        note: 'A uniform electric field crosses a lens ten times more '
-            + 'polarizable than its surroundings. The field bends at both faces '
+        note: 'A uniform electric field crosses a lens with ten times the '
+            + 'permittivity of its surroundings. The field bends at both faces '
             + 'and the equipotentials spread apart inside the lens. This is '
             + 'refraction of a static field, not focusing of light.',
         system: { physics: 'electrostatics' },

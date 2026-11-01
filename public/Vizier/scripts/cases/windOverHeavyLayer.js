@@ -16,9 +16,7 @@ caseRegister(() => ({
     // Heavy B carries the force, and the light stream feels none, so the outlet
     // in it can hold one pressure without fighting a hydrostatic gradient.
     system: { buoyantField: { field: 'speciesB', reference: 0, sign: '+' } },
-    // 512 cells and a coarsest level of 32, as the mixing layer has. With no
-    // viscosity every advection term is pure upwind and sits in the
-    // denominator.
+    // 512 cells and a coarsest level of 32, as the mixing layer has.
     solver: {
         cells: 512, coarsestCells: 32,
         timeStep: 1 / 120, stepsPerFrame: 2, cyclesPerFrame: 2,
@@ -41,10 +39,9 @@ caseRegister(() => ({
             { field: 'speciesB', value: 1, at: (x, y) => y >= 0.5 + 0.004 * Math.sin(12 * Math.PI * x) },
         ],
     },
-    // Zero asks for the Euler equations, as in the mixing layer. A buoyancy of
-    // 1 puts the densimetric Froude number U / sqrt(g' H) at 0.7, so the stream
-    // cannot shove the layer aside, and a shear layer rolls up until it is
-    // about 0.06 thick, where its Richardson number reaches a quarter.
+    // The Euler equations, as in the mixing layer. A densimetric Froude number
+    // U / sqrt(g' H) of 0.7, so the stream cannot shove the layer aside; the
+    // shear layer rolls up until about 0.06 thick, where Ri reaches a quarter.
     coefficients: { viscosity: 0, massDiffusivity: 0, buoyancy: 1 },
     sliders: { buoyancy: [0.125, 8] },
     panel: { velocityScale: 0.5, lengthScale: 0.5 },

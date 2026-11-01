@@ -32,10 +32,9 @@ function captureImage(canvas, vision) {
 }
 
 // Video
-//
-// H.264 in an MP4 where the browser can encode it, since every editor opens
-// that, and VP9 in an MP4 otherwise. The bit rate, about 9 Mbit/s at 1024
-// pixels, is plenty for flat fields of color.
+
+// H.264 where the browser can encode it, since every editor opens that, and VP9
+// otherwise. About 9 Mbit/s at 1024 pixels, plenty for flat fields of color.
 
 // Stopped on a frame count, so a recording left running cannot fill the
 // memory.

@@ -45,16 +45,15 @@ function appActivePreset() {
     return appLayout ? sandboxWithLayout(controlled, appLayout) : controlled;
 }
 
-// A case whose step is held near h^2 declares it at its own mesh; at another
-// resolution the step moves with the square of the spacing, so a finer mesh
-// plays slower and stays stable.
+// A case whose step is held near a limit declares it at its own mesh; at
+// another resolution the step moves with a power of the spacing, so a finer
+// mesh plays slower and stays stable.
 function appMeshScaled(preset) {
     const cells = appResolutionOverride;
-    if (!(cells > 0) || cells === preset.solver.cells || preset.solver.timeStepScaling !== 'spacingSquared') {
-        return preset;
-    }
+    const power = CASE_TIME_STEP_POWERS[preset.solver.timeStepScaling];
+    if (!(cells > 0) || cells === preset.solver.cells || !power) return preset;
     const ratio = preset.solver.cells / cells;
-    return { ...preset, solver: { ...preset.solver, cells, timeStep: preset.solver.timeStep * ratio * ratio } };
+    return { ...preset, solver: { ...preset.solver, cells, timeStep: preset.solver.timeStep * ratio ** power } };
 }
 
 function appSetCoefficient(name, value) {
@@ -90,9 +89,8 @@ function appSetResolution(interior) {
 // The coefficient slots
 
 // Every slot, from the running case and the viewer's sliders. A value made of
-// two controls is made here, so a slot stays one number a term reads: Monod's
-// uptake is the growth rate over the yield, and the yield never reaches the
-// shader. A slot the case does not read holds zero.
+// two controls is made here, so a slot stays one number a term reads. A slot
+// the case does not read holds zero.
 function appCoefficientValues() {
     const preset = appActivePreset();
     return {

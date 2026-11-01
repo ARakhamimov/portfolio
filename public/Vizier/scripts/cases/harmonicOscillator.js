@@ -18,10 +18,9 @@ caseRegister(() => ({
         timeStepScaling: 'spacingSquared' },
     geometry: { edges: { left: WALL, right: WALL, top: WALL, bottom: WALL } },
     inlet: { speed: 0 },
-    // V = (1/2) omega^2 r^2 with omega = 300, written as V0 w with w = 4 r^2,
-    // one at the middle of each edge. The ground state is 1 / sqrt(omega)
-    // wide, and the packet's sideways wavenumber omega times its offset sends
-    // it round a circle.
+    // V = (1/2) omega^2 r^2, omega = 300, as V0 w with w = 4 r^2. The ground
+    // state is 1 / sqrt(omega) wide, and a sideways wavenumber of omega times
+    // the offset sends the packet round a circle.
     initial: { packets: [{ x: 0.25, y: 0.5, width: 1 / Math.sqrt(300), kx: 0, ky: 300 * 0.25 }] },
     coefficients: {
         viscosity: 0,

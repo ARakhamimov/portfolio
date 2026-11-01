@@ -1,11 +1,9 @@
 // verify_geometry.js, by Allen Rakhamimov.
 // What the geometry's shapes do to the classification arrays.
 //
-// No solver. This checks what a rect, a fill and a circle given to addGeometry
-// do to the classification arrays. A primitive that does nothing is the failure to guard
-// against, since a case with no obstacles still runs and still looks like a
-// plausible flow. Extents are checked against physical positions, for the
-// reason verify_layout.js gives.
+// No solver. A primitive that does nothing is the failure to guard against,
+// since a case with no obstacles still runs and looks like a plausible flow.
+// Extents are checked against physical positions, as in verify_layout.js.
 //
 // Three rules a case author relies on are asserted: a later shape overwrites an
 // earlier one; a small circle survives on coarse levels while a thin rectangle
@@ -72,10 +70,9 @@ function sameCenterMap(a, b) {
     return true;
 }
 
-// Flood fill over fluid interior centers from the column beside the inlet ghost
-// to the column beside the outlet ghost. A carved passage has to keep this on
-// every level: a level with no path from inlet to outlet has nothing useful to
-// correct the finer level with.
+// A flood fill from beside the inlet to beside the outlet. A level with no path
+// has nothing useful to correct the finer level with, so a carved passage must
+// keep one on every level.
 function connectsInletToOutlet(plate, level) {
     const n = plate.interior[level];
     const seen = new Uint8Array((n + 2) * (n + 2));
@@ -182,10 +179,9 @@ function checkCornerOrder(finestIndex, rect) {
 
 // 4. Declaration order, and the carve
 //
-// The maze is a solid fill with fluid rectangles carved back out of it, and
-// nothing special-cases the carve: a later shape overwrites an earlier one. The
-// reverse order is checked too, since "overwrites" means something only if the
-// other order gives the other answer.
+// Nothing special-cases the carve: a later shape overwrites an earlier one. The
+// reverse order is checked too, since "overwrites" means something only if it
+// gives the other answer.
 
 function checkCarve(finestIndex, rect) {
     const carved = new Plate(finestIndex);
@@ -230,10 +226,9 @@ function checkCarve(finestIndex, rect) {
 
 // 5. Faces follow the centers
 //
-// rebuildClassification marks the centers, then derives the faces from the
-// finished center map. A rebuild that skipped the faces would leave a carved
-// passage with the face types of the solid block it was cut from, and the
-// solver would run against that mask without complaint.
+// Faces come from the finished center map. Skipping them would leave a carved
+// passage with the face types of the block it was cut from, and the solver
+// would run without complaint.
 
 function checkFacesFollow(plate, label) {
     for (let level = 0; level < plate.numLevels; level++) {
@@ -269,14 +264,8 @@ function checkFacesFollow(plate, label) {
 
 // 6. Small features: a circle survives, a rectangle does not
 //
-// A circle smaller than a coarse cell is kept alive, so it does not
-// vanish with its boundary condition. Doing the same for a rectangle would
-// widen a carved passage, so a thin rectangle is allowed to disappear. Both
-// halves are asserted.
-//
-// The rectangle is placed between two coarse cell centers, so whether it
-// disappears depends on where it lands as well as on its width: a plate thinner
-// than a coarse cell is absent on that level, not coarsely drawn.
+// Both halves are asserted. The rectangle sits between two coarse cell centers,
+// so it is absent on that level, not coarsely drawn.
 
 function checkSmallFeatures(finestIndex) {
     const probe = new Plate(finestIndex);

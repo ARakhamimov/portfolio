@@ -18,10 +18,9 @@ caseRegister(() => ({
     coefficients: {
         viscosity: 0.002,
         permeability: 0.0016,
-        // The drag is 25 times higher in the patch. A larger factor makes the
-        // bypass plainer but thins the Brinkman layer inside it, sqrt(K / 25),
-        // already two cells at 256. The patch runs along the top wall and is
-        // nine coarse cells by eight at 32.
+        // A larger factor makes the bypass plainer but thins the Brinkman layer
+        // inside the patch, sqrt(K / 25), already two cells at 256. The patch is
+        // about 18 by 16 cells on the coarsest level.
         fouledPatch: { factor: 25, rect: [0.20, 0.0, 0.75, 0.50] },
         massDiffusivity: 0.0012,
     },

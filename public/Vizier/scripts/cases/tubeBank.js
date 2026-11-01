@@ -8,9 +8,9 @@ caseRegister(() => ({
     label: 'Tube bank',
     view: 'species',
     note: 'Eight large tubes three diameters apart, each with room for its '
-        + 'wake to roll up. A steady flow keeps the boundary between the feeds '
-        + 'on one streamline, so lower the viscosity until the wakes oscillate '
-        + 'to fold it.',
+        + 'wake to roll up. At the default viscosity the wakes sway, and they '
+        + 'fold the boundary between the feeds. Raise the viscosity until they '
+        + 'hold still, and the boundary stays on one streamline.',
     // A tube is 51 cells across at 512, so its wake can be driven hard: the
     // peak-speed Reynolds ceiling grows with a tube's size in cells. Two cycles
     // a frame pay for four times the cells.

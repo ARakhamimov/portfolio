@@ -7,11 +7,9 @@
 
 'use strict';
 
-// One row per field. A solved field gets residual, right-hand side and
-// restricted arrays for the multigrid cycle, and a field with history gets one
-// stored previous time level. Pressure is solved with no history, because it
-// enforces a constraint at the new level only. label, symbol and formula are
-// the display's; nothing in the solver reads them.
+// A solved field gets the multigrid workspace arrays, and a field with history
+// one stored previous time level. Pressure has no history, since it enforces a
+// constraint at the new level only.
 const FIELD_SPEC = [
     { name: 'temperature', location: CENTER, solved: true,  history: true,  label: 'temperature', symbol: 'T'   },
     { name: 'pressure',    location: CENTER, solved: true,  history: false, label: 'pressure',    symbol: 'p'   },
@@ -42,7 +40,7 @@ const FIELD_SPEC = [
       label: 'imaginary part', symbol: 'ψ_I' },
     { name: 'divergence',  location: CENTER, solved: false, history: false, label: 'divergence',  symbol: '∇·**u**' },
     // Display only: the streamline overlay's stream function, held at cell
-    // corners in a center-shaped array. A capital, since psi is a potential.
+    // corners in a center-shaped array. A capital, since ψ is the wave function.
     { name: 'streamFunction', location: CENTER, solved: false, history: false,
       label: 'stream function', symbol: 'Ψ' },
 ];
@@ -69,10 +67,8 @@ function fieldPresentationOf(name, property, physics) {
 // equations than there are slots.
 const FIELD_HEALTH_SLOTS = FIELD_SPEC.filter((f) => f.solved).length;
 
-// The registry as arrays, in allocation order. The allocation and the WGSL
-// structs both take their order from here, so they cannot disagree. Only the
-// fields in `fields` get arrays, their state and, for a solved one, its
-// multigrid workspace; every field gets them when it is left out.
+// The registry as arrays, in the order the allocation and the WGSL structs
+// both take. Only the fields in `fields` get arrays; all do when it is left out.
 function expandFieldSpec(spec, fields) {
     const arrays = [];
     for (const f of spec) {
@@ -112,10 +108,9 @@ function arrayNamesOfField(name) {
     return arrayNamesFor(name, spec.location, { history: spec.history !== false });
 }
 
-// The fields a running system gets arrays for: those it solves, plus the two
-// shown and never solved where they mean something, the divergence wherever
-// there is a velocity and the stream function wherever there is a flow to draw
-// streamlines of. The page's plate allocates these and nothing else.
+// The fields a running system gets arrays for: those it solves, the divergence
+// wherever there is a velocity, and the stream function wherever there is a
+// flow to draw streamlines of.
 function simulationFields(system) {
     const fields = system.equations.map((equation) => equation.field);
     if (kernelsHasVelocity(system)) fields.push('divergence');

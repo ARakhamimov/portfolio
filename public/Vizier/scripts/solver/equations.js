@@ -7,13 +7,9 @@
 
 'use strict';
 
-// An equation as a case declares it:
-//
 //   { field: 'temperature', location: CENTER, role: 'scalar', steady: false,
 //     theta: 0.55, terms: [{ term: 'diffusion', diffusivity: 0.02 }, ...] }
-//
-// role picks the boundary table's column; the time derivative is inserted for
-// every unsteady row.
+// role picks the boundary table's column; the time derivative is inserted.
 function normalizeEquation(spec) {
     const terms = spec.terms.slice();
     const location = spec.location !== undefined ? spec.location : CENTER;
@@ -64,14 +60,10 @@ function pointLets(body, index, positionFunction) {
     return lines.map((line) => `\n            ${line}`).join('');
 }
 
-// The equation at one point:
-//
-//     0 = -(q - qOld) / dt + theta (terms new) + (1 - theta) (terms old) + f
-//
-// relaxed by q = q - residual / diagonal. The operator N(q) is minus the terms.
-// A term reading the pressure is added whole at the new level, since the
-// pressure has no old level. The pressure row has no diagonal, so no relax_:
-// system.js steps it from its residual.
+// 0 = -(q - qOld) / dt + theta (terms new) + (1 - theta) (terms old) + f,
+// relaxed by q = q - residual / diagonal; N(q) is minus the terms. A term
+// reading the pressure is whole at the new level. The pressure row has no
+// diagonal, so no relax_: system.js steps it from its residual.
 function makeEquationCode(equation, arrayNames) {
     const field = equation.field;
     const index = indexFunctionAt(equation.location);

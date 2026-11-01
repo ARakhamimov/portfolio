@@ -3,9 +3,9 @@ is a WebGPU reactive flow simulator made as part of my Master's thesis at The Co
 
 ## What's on the page?
 
-The first this you see is the canvas, where the actual simulation is displayed. Below it, you'll find the control panel, with buttons that let you play/pause, reset, change the resolution, capture an image, or record the simulation. Further below that you have viewmode buttons that allow you to change what field you're looking at, with a color key/legend located a little further down the page. There are additional display settings like accessible hatching for colorblind users, directional arrows or streamlines, etc.
+The first thing you see is the canvas, where the actual simulation is displayed. Below it, you'll find the control panel, with buttons that let you play/pause, reset, change the resolution, capture an image, or record the simulation. Further below that you have viewmode buttons that allow you to change what field you're looking at, with a color key/legend located a little further down the page. There are additional display settings like accessible hatching for colorblind users, directional arrows or streamlines, etc.
 
-On the right (on big screens) or further below (on little screens) you can see the case list. You can click a case to switch to it, and each case usually has different fields to view and sliders to play with. Below that, "Equations Solved" displays the equations fed into the solver for that case, and "Dimensionless Numbers" presents the relevant dimensionless numbers for that case (which are cool to look at as you change the sliders). There's an additional section with "develop readouts" containing the code verification scripts and some other fun numbers
+On the right (on big screens) or further below (on little screens) you can see the case list. You can click a case to switch to it, and each case usually has different fields to view and sliders to play with. Below that, "Equations Solved" displays the equations fed into the solver for that case, and "Dimensionless Numbers" presents the relevant dimensionless numbers for that case (which are cool to look at as you change the sliders). There's an additional section with "Develop Readouts" containing the code verification scripts and some other fun numbers.
 
 ## Code?
 

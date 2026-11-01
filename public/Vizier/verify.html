@@ -3,12 +3,9 @@
 
 <!-- verify.html, by Allen Rakhamimov.
      The verification checks in a browser, opened straight from the folder with
-     no server: every check in verify/checks.js, one after another, then the GPU
-     checks (verify/known_answers.js and verify/every_case_runs.js). Each check
-     file registers itself here instead of running, and the page calls it. A
-     check reports passed, failed, or could not run here, since a browser
-     without WebGPU must not look like a broken suite.
-     A first read wants runChecks(), runTestCases() and runCompileTest(). -->
+     no server. A check reports passed, failed, or could not run here, since a
+     browser without WebGPU must not look like a broken suite. A first read
+     wants runChecks(), runTestCases() and runCompileTest(). -->
 
 <head>
 <meta charset="utf-8">
@@ -112,10 +109,9 @@
     const breathe = () => new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve, 0)));
 
     // Loading
-    //
+
     // A script that fails to parse still fires its load event, so errors are
-    // caught on the window while loading. Two scripts declaring the same
-    // top-level name is exactly such an error, and this is where it shows.
+    // caught on the window, which is where a duplicate top-level name shows.
     const loadErrors = [];
     // Opened as a file, the browser withholds the details and reports only
     // "Script error.", so the message then points at the console, which names
@@ -304,11 +300,9 @@
         gpuOut.append(span);
     }
 
-    // Every case, compiled on this device, with pipelines for one case per
-    // equation system (why, at the loop below). A shader the GPU rejects reaches
-    // a viewer as a blank canvas, and Run checks, which compiles no WGSL, cannot
-    // see it. Built at 128 cells: the shader's structure does not depend on the
-    // resolution, and a small plate keeps the loop quick.
+    // Every case, compiled on this device: a shader the GPU rejects reaches a
+    // viewer as a blank canvas, which Run checks cannot see. At 128 cells, since
+    // the shader's structure does not depend on the resolution.
     async function compileEveryCase(device) {
         log('EVERY CASE COMPILES ON THIS GPU');
         const format = pipelineFormat();
@@ -316,13 +310,9 @@
         const stand = device.createTexture({
             size: [1, 1], format: 'rgba8unorm', usage: GPUTextureUsage.STORAGE_BINDING,
         });
-        // Every preset's WGSL is validated, which reports every error in the
-        // language itself. Building pipelines adds the check against the
-        // pipeline layout, which every case shares, and the compile to the GPU's
-        // native code, which is the slow part (up to about a hundred entry points
-        // a case). What that compile sees changes with the terms the equations
-        // carry, so pipelines are built for the first preset of each distinct
-        // equation system, asynchronously so the page stays responsive.
+        // Every preset's WGSL is validated. Pipelines, the slow part, are built
+        // for the first preset of each distinct equation system, since what the
+        // native compile sees changes only with the terms.
         let failures = 0;
         const original = appActivePreset().id;
         const systemsBuilt = new Set();
@@ -374,10 +364,8 @@
         return failures;
     }
 
-    // Every file-prefixed function page.js calls must exist once the scripts are
-    // loaded the way the app loads them. It needs page.js's text, which a page
-    // served from a site can read and a page opened as a file cannot, and then
-    // it says so.
+    // Every file-prefixed function page.js calls must exist. It needs page.js's
+    // text, which a page opened as a file cannot read, and then it says so.
     async function checkPageCalls() {
         log('');
         log('EVERY FUNCTION THE APP PAGE CALLS BY FILE PREFIX IS DEFINED');

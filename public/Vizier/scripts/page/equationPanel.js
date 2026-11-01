@@ -2,12 +2,10 @@
 // The equations and reactions the panel beside the picture sets, from the
 // case's own system.
 //
-// The solver never learns what a field means; this file holds the symbols a
-// viewer wants (C_A for a concentration, nu for a viscosity). A field's symbol
-// lives in FIELD_SPEC beside its label; the tables here are for vectors and
-// coefficients. Each dictionary entry writes its own term (describe), and this
-// file only chooses the letters and sets the result. Nothing in the solver
-// depends on it.
+// The solver never learns what a field means. Fields' symbols are in
+// FIELD_SPEC and each dictionary entry writes its own term; this file chooses
+// the letters for vectors and coefficients and sets the result. Nothing in the
+// solver depends on it.
 
 'use strict';
 
@@ -125,9 +123,7 @@ function panelSymbols(physics) {
 
 // The equations
 
-// What the equation panel sets: each term's describe, with the symbols the
-// caller supplies (field, vector, and coefficient by slot or by kind), so
-// nothing here knows what a field stands for. The bodies use a three-rule
+// Each term's describe, with the symbols the caller supplies. The bodies use a
 // notation that serves HTML and plain text: `_x` a subscript, `^2` a
 // superscript ending at its last digit, `**u**` bold.
 
@@ -273,17 +269,10 @@ function panelEquationNotes(system) {
 }
 
 // The reactions, in formula form
-//
-// Every reaction term carries its reaction's name, so the terms gather back
-// into a formula. A term CONSUMES its equation's species (a sink) or PRODUCES
-// it (a source), at a rate proportional to its FACTORS, the species the rate
-// law multiplies, which are the reaction's left-hand side. The EVENT rate is
-// read off one reference term, its first source or else its first sink over
-// the rate law's order in the species it consumes (2A -> enters as -2k A^2, so
-// the event rate is k); each term's rate over the event rate is that species'
-// coefficient. A factor nothing consumes stands on both sides (a catalyst, an
-// autocatalyst), and a tagged heat source says the reaction releases heat.
-// Each dictionary entry a reaction term can be says how it reads (reaction).
+
+// Tagged terms gather back into a formula: FACTORS are the left-hand side, a
+// term's rate over the EVENT rate is its species' coefficient, and a factor
+// nothing consumes stands on both sides (a catalyst, an autocatalyst).
 
 // The host value of a rate, without its temperature factor or its shape: the
 // part two terms of one reaction can be compared by.

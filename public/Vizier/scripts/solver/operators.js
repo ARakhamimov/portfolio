@@ -2,9 +2,8 @@
 // The velocity's divergence, vorticity and interpolations, as WGSL.
 //
 // Each difference lands exactly where it is read: a divergence on the cell its
-// four faces bound, a vorticity on the corner its two differences straddle.
-// The interpolations are plain averages of the points that straddle the target,
-// never weighted and never one-sided; advection's upwind bias is its own matter.
+// four faces bound, a vorticity on the corner its differences straddle. The
+// interpolations are plain averages, never weighted and never one-sided.
 
 'use strict';
 

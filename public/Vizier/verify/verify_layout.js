@@ -100,10 +100,8 @@ function checkOffsets(plate) {
 
 // 3. The controls buffer against its own struct
 //
-// The host writes this buffer at byte offsets from its slot list, and the
-// shader reads it as a struct. A mismatch does not fail; it decodes the wrong
-// bytes into a plausible number. Both come from controlsSlotNames, and this
-// asserts that they still do.
+// The host writes byte offsets from its slot list and the shader reads a
+// struct; a mismatch decodes the wrong bytes into a plausible number.
 
 function checkControlsLayout(plate) {
     const source = makeStructCode(plate);
@@ -134,11 +132,9 @@ function checkControlsLayout(plate) {
 
 // 4. The coefficients buffer, and the two resolvers over it
 //
-// The same failure and the same guard as the controls buffer, except that every
-// slot is a single f32, so the struct is generated from the slot list. This
-// asserts the generation, and the two resolvers: a term parameter is a number
-// or a slot, and a term that read the wrong one would emit a literal that never
-// moves with its slider.
+// The same guard as the controls buffer, and the two resolvers: a term that
+// read a number for a slot would emit a literal that never moves with its
+// slider.
 
 function checkCoefficientsLayout(plate) {
     const source = makeStructCode(plate);

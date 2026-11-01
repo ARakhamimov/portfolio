@@ -9,9 +9,8 @@
 
 // Boundary types
 
-// The type a point presents to the solver; what a type means for each field is
-// the boundary table in boundary.js. INERT is padding with no neighboring cell,
-// which is not the same as unread (combineFaceType).
+// INERT is padding with no neighboring cell, which is not the same as unread
+// (combineFaceType).
 const FLUID    = 0;
 const WALL     = 1;
 const INLET    = 2;
@@ -101,19 +100,12 @@ function geometryShapeContains(shape, x, y) {
 
 // Marking a geometry
 
-// A case's geometry as data, marked on every level at once from the finished
-// lists, and never restricted:
-//   edges   the type of each side of the ghost ring, named in screen
-//           orientation (top at row 0); a side left out is a wall
-//   ports   stretches of the ghost ring typed differently from their edge,
-//           each { start, end, type } along the perimeter (boundaryPerimeterOf)
-//   solids  shapes in order, each with the type it presents to the fluid, any
-//           type FLUID included, so a later one overwrites an earlier one and
-//           a carve is a FLUID shape; { kind: 'fill' } covers the interior
-//   paints  regions laying down catalyst, porous medium, or bare fluid, which
-//           clears both, each { shape, material, strength }
-// Edges and ports are marked first, then the solids, then the faces from the
-// finished centers, then the paint. The plate keeps what it was marked from.
+// A geometry, marked on every level from the finished lists, never restricted:
+//   edges   each side's type, top at row 0; a side left out is a wall
+//   ports   { start, end, type } along the perimeter (boundaryPerimeterOf)
+//   solids  shapes in order, later over earlier; a carve is a FLUID shape,
+//           and { kind: 'fill' } covers the interior
+//   paints  { shape, material, strength }; bare fluid clears every material
 function addGeometry(plate, geometry) {
     plate.edges = { left: WALL, right: WALL, top: WALL, bottom: WALL, ...geometry.edges };
     plate.ports = (geometry.ports || []).map((port) => ({ ...port }));
@@ -124,11 +116,8 @@ function addGeometry(plate, geometry) {
     paintMaterials(plate);
 }
 
-// A solid in the form it is marked in. A rectangle marks the cells whose
-// centers fall inside it, whichever way its corners were given, and a thin one
-// is not kept alive, since that would widen a carved passage: keep walls and
-// passages two cells wide on the coarsest level. A capsule or a stroke marks
-// every cell whose center lies within its radius of the segment or the path.
+// A rectangle is not kept alive, since that would widen a carved passage: keep
+// walls and passages two cells wide on the coarsest level.
 function geometrySolid(solid) {
     const type = solid.type === undefined ? WALL : solid.type;
     if (solid.kind === 'fill') return { kind: 'fill', type };
@@ -212,20 +201,18 @@ function markShape(plate, level, shape) {
     }
 }
 
-// A circle narrower than a level's cell would vanish there and take its
-// boundary condition with it, so on that level it covers at least half a
-// cell diagonal around its center. The coarse obstacle is then a different
-// shape, which costs correction quality and never correctness.
+// A circle narrower than a level's cell would vanish there with its boundary
+// condition, so it covers at least half a cell diagonal. The coarse obstacle
+// is then a different shape, which costs correction quality, not correctness.
 function keptAlive(plate, shape, level) {
     const spacing = plate.spacing[level];
     if (shape.kind !== 'circle' || shape.radius > spacing * Math.SQRT2) return shape;
     return { ...shape, radius: Math.max(shape.radius, spacing * Math.SQRT2 / 2) };
 }
 
-// The flat indices of every point of a location on a level whose position
-// the piece contains, over the interior or every stored point. A position
-// is its index less at most one cell, times the spacing, so the window
-// below holds every point the piece's box can.
+// The flat indices of the points the piece contains. A position is its index
+// less at most one cell, times the spacing, so the window holds every point
+// the piece's box can.
 function pointsCovered(plate, location, level, piece, interiorOnly) {
     const covered = [];
     const spacing = plate.spacing[level];
@@ -275,10 +262,8 @@ function classifyFaces(plate) {
     }
 }
 
-// Each painted array, at its own points on every level, from the list of
-// regions. A face is in a porous region or not by where the face itself is.
-// A region writes only its own material's layer, and bare writes zero to
-// every layer.
+// Each painted array at its own points on every level. A face is in a porous
+// region by where the face itself is. Bare writes zero to every layer.
 function paintMaterials(plate) {
     const targets = [
         { location: CENTER, array: plate.paintCatalystCenter, material: 'catalyst' },
@@ -305,10 +290,9 @@ function paintMaterials(plate) {
 //   fluid | other  ->  other   a boundary face
 //   other | other  ->  other   a ghost face, filled by the same rule
 //
-// A ghost face tangential to a wall is read by the diffusion stencil of the
-// face beside it, so it is typed and filled, and only padding with no cell at
-// all is INERT. At a corner between two differently typed edges the minus side
-// wins.
+// A ghost face tangential to a wall is read by the stencil of the face beside
+// it, so only padding with no cell at all is INERT. At a corner between two
+// differently typed edges the minus side wins.
 function combineFaceType(typeMinus, typePlus) {
     if (typeMinus === FLUID && typePlus === FLUID) return FLUID;
     if (typeMinus === FLUID) return typePlus;

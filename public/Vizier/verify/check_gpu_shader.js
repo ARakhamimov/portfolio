@@ -144,10 +144,8 @@ function staticCheck(label, source, entryPoints, options = {}) {
         if (!defined.has(entry)) fail(`${label}: entry point ${entry} is missing`);
     }
 
-    // The point names are local to every function that uses them, and a
-    // fragment one emitter pastes into another's function has to find them
-    // defined there. Run checks compiles no WGSL, so an undefined local would
-    // otherwise be found only by the Compile test.
+    // A fragment one emitter pastes into another's function has to find the
+    // point names defined there; otherwise only the Compile test would see it.
     let undefinedLocals = 0;
     for (const m of code.matchAll(/\bfn\s+(\w+)\s*\(([^{]*)\{/g)) {
         let depth = 1, k = m.index + m[0].length;
@@ -178,10 +176,8 @@ appGeometry(appPlate);
 staticCheck('app', buildSimulationSource(appPlate, appSystem(), appBoundaryTable(), 8, appActivePreset().display),
     ['drawField', 'setLevel0', 'computeDivergence', 'recordVelocityMax', 'scanVelocityMax']);
 
-// Every preset, not only the one the page opens on: a term that fails to emit,
-// emits a bare integer, or calls something never written would otherwise wait
-// for a viewer to click that case. One line per preset, since the output that
-// matters is a failure.
+// Every preset, not only the one the page opens on, or a bad term would wait for
+// a viewer to click that case. One line per preset.
 console.log('');
 console.log('EVERY PRESET ASSEMBLES');
 {

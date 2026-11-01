@@ -37,12 +37,9 @@ function heading(text) {
 
 // The views follow the system
 //
-// The view bar offers only the views a case can fill, from each record's needs
-// in views.js. Checking that list against itself would prove nothing, so this reads
-// the shader: for every view offered, the arm the draw kernel takes for it is
-// cut out of the generated source, and every solver array the arm reads must
-// belong to a field the case solves. A view of an array nothing writes would
-// draw a picture that looks like a result.
+// Read from the shader, not the needs in views.js: every solver array an offered
+// view's arm reads must belong to a field the case solves, or the view draws a
+// picture of an array nothing writes.
 const VIEW_ARM_READS = [
     [/centerState\.temperature\b/, ['temperature']],
     [/centerState\.pressure\b|DRAW_BASE_PRESSURE/, ['pressure']],
@@ -54,10 +51,9 @@ const VIEW_ARM_READS = [
     [/drawCurrentAt|drawSampleCurrent/, ['potential']],
 ];
 
-// Every solver array an arm names directly, by buffer member or by sampler
-// base, whatever the field: the table above covers the helpers that hide an
-// array behind a function, and this covers everything else, so a field added
-// to FIELD_SPEC is checked here with no edit to the check.
+// Every solver array an arm names directly, whatever the field, so a field added
+// to FIELD_SPEC is checked with no edit; the table above covers the helpers
+// that hide an array behind a function.
 function armArraysRead(arm) {
     const fields = new Set();
     for (const match of arm.matchAll(/\b(?:centerState|xFace|yFace)\.([a-zA-Z]+)\b/g)) fields.add(match[1]);
@@ -179,13 +175,9 @@ function checkViewsFollowSystem() {
     return { presets: presets.length, offeredTotal, counts };
 }
 
-// The species row against the species arm of the generated draw shader. Each
-// button carries a viewSpecies value and names a field; the arm decides which
-// color component that value keeps. Read from the shader text, never from the
-// list that generated it, so a generator that drifted from the row goes red: the
-// value a button sends must keep exactly the component that samples the array
-// the button names, that array must be one the case solves, and 0 must keep
-// every component, since 0 is the mixture.
+// The species row against the generated species arm, read from the shader text:
+// a button's value must keep exactly the component that samples the array it
+// names, a solved one, and 0 (the mixture) must keep every component.
 function checkSpeciesRowFollowsSystem() {
     const presets = casePresets();
     let buttons = 0;

@@ -1,7 +1,7 @@
 // known_answers.js, by Allen Rakhamimov.
 // Two problems whose answer is known exactly, solved on the GPU by the solver
-// Vizier runs: the shader it generates, the V-cycle in runtime.js, the boundary
-// fill and the time stepping.
+// Vizier runs: the shader it generates, the V-cycle in multigrid.js, the
+// boundary fill and the time stepping.
 //
 //   1. A sine mode decaying under the heat equation between walls held at 0.
 //      The mode is an exact eigenvector of the five-point Laplacian with the

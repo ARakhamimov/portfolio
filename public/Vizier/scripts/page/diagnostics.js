@@ -240,12 +240,10 @@ function diagnosticsDownload(content, fileName) {
 }
 
 // Simulated color vision
-//
-// Blink's own matrices (third_party/blink/renderer/core/css/
-// vision_deficiency.cc): Machado, Oliveira and Fernandes (2009) at full
-// severity for the dichromacies, Rec. 709 luminance for achromatopsia, applied
-// in LINEAR RGB as Blink applies them. The preview and the saved image read
-// this one table. Each row maps (R, G, B) in linear light to one channel.
+
+// Blink's matrices (vision_deficiency.cc): Machado, Oliveira and Fernandes
+// (2009) at full severity, Rec. 709 luminance for achromatopsia, applied in
+// linear RGB. The preview and the saved image read this one table.
 const DIAGNOSTIC_VISION = [
     ['normal', null],
     ['protanopia', [

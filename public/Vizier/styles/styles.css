@@ -534,6 +534,7 @@ button[aria-pressed="true"] {
 #speciesCaption[hidden], #speciesShown[hidden], #materialCaption[hidden], #materialShown[hidden],
 #residualCaption[hidden], #residualFields[hidden] { display: none; }
 #reactionNote { margin: 8px 0 0; font-size: 16px; line-height: 1.45; color: var(--text-dim); }
+#equationsNote { margin: 0 0 8px; font-size: 16px; line-height: 1.45; color: var(--text-dim); }
 
 #presets::-webkit-scrollbar { width: 8px; }
 #presets::-webkit-scrollbar-thumb { background: var(--line); border-radius: 4px; }
@@ -778,8 +779,8 @@ main.verifyMain {
     flex-direction: column;
     gap: 16px;
     max-width: 1100px;
-    /* The cards take the column's width and no more, so the wide results table
- * and logs scroll inside their own boxes at phone width. */
+    /* The cards take the column's width and no more, so the wide results
+     * table and logs scroll inside their own boxes at phone width. */
     align-items: stretch;
 }
 
@@ -889,8 +890,8 @@ main.verifyMain {
     h1 { font-size: 26px; }
     canvas, .plateFrame { max-width: 100%; }
     .controlbar { grid-template-columns: minmax(0, 1fr); gap: 4px 0; }
-    /* The warning names the controls column by number, and a one-column grid has
- * no column 2, so the browser would add one and shift every row after it. */
+    /* The warning names the controls column by number, and a one-column grid
+     * has no column 2, so the browser would add one and shift every row. */
     .caution { grid-column: 1; }
     .caption { text-align: left; line-height: 1.5; margin-top: 6px; }
     .caption:first-child { margin-top: 0; }

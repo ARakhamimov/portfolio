@@ -2,12 +2,10 @@
 // The sandbox's Build card and build mode: drawing shapes and ports with the
 // pointer or the keys, offered only while the sandbox runs.
 //
-// Every edit goes to the page through edit.apply, which asks sandboxProblems
-// first and leaves the running layout alone when anything is refused, so
-// nothing here touches a buffer or decides what is allowed. The arithmetic of
-// an edit (snapping, the shape a drag draws, where a new port goes) is in
-// sandbox.js. A shape being drawn is an outline over the picture, gone once it
-// is placed; what stays is the staircase of cells the solver marks.
+// Every edit goes through edit.apply, which asks sandboxProblems first, so
+// nothing here touches a buffer or decides what is allowed; the arithmetic is
+// in sandbox.js. An outline shows a shape being drawn; what stays is the
+// staircase of cells the solver marks.
 
 'use strict';
 
@@ -447,5 +445,5 @@ function editorDrawCard(edit) {
         if (!port) { edit.refuse('Every edge is taken: shorten or remove a port first.'); return; }
         next.ports.push(port);
         edit.apply(next);
-    }, { disabled: layout.ports.length >= boundaryPortCount() })]));
+    }, { disabled: layout.ports.length >= BOUNDARY_PORT_COUNT })]));
 }

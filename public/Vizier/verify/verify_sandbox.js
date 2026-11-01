@@ -1,12 +1,8 @@
 // verify_sandbox.js, by Allen Rakhamimov.
 // The sandbox's ports, shapes, paint and refusals.
 //
-// The sandbox lets a viewer place inlets and outlets anywhere along the edges,
-// solid shapes anywhere inside, and paint catalyst and porous medium. All of it
-// is data: a port is a stretch of the ghost ring retyped by classification plus
-// five coefficient slots, a shape is classification, and a painted region is an
-// array in the grid buffer, so nothing a viewer does changes the shader. The
-// sandbox is found among the presets by its category, not by id.
+// Everything a viewer builds is data (classification, slots, painted arrays),
+// so nothing changes the shader. The sandbox is found by its category.
 //
 //   1. Ports mark the ghost ring, at every level, with their own type.
 //   2. The generated shader is byte-identical across layouts: ports moved and
@@ -163,7 +159,7 @@ section('2. THE SHADER IS THE SAME FOR EVERY LAYOUT', () => {
         check(`${name}: byte-identical`, source === reference,
             `${source.length} characters against ${reference.length}`);
     }
-    for (let k = 0; k < boundaryPortCount(); k++) {
+    for (let k = 0; k < BOUNDARY_PORT_COUNT; k++) {
         check(`the shader reads port ${k}`, reference.includes(`coefficients.portSpeed${k}`)
             && reference.includes(`coefficients.portStart${k}`));
     }

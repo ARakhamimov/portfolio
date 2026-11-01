@@ -114,7 +114,7 @@ against:
 | `equationPanel.js` | The equations and reactions set from the case, and the symbols they are set in. |
 | `casePanel.js` | The case's numbers (`caseSummary`) and the tables beside the picture. |
 | `capture.js` | Saving the canvas as an image or a video. |
-| `page.js` | The page: opening the GPU, building a scene, the case box, the frame loop, the refresh and the divergence watchdog. |
+| `page.js` | The page: opening the GPU, building a scene, the case box, the frame loop, the refresh, and the divergence and speed watchdogs. |
 
 `index.html` is the page's markup, and `page.js` runs it: `start()` lists the
 steps, and each is a function below it. `verify.html` runs the checks in

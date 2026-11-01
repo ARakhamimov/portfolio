@@ -12,7 +12,7 @@ caseRegister(() => ({
         + 'what the mesh resolves at its fastest point. The panel shows the '
         + 'Reynolds number requested beside the one the mesh delivers there. '
         + 'The slower wake keeps more of it, so the street still sheds.',
-    // Well upstream, leaving nearly eight diameters of wake.
+    // Well upstream, leaving about fourteen diameters of wake.
     geometry: { solidCircles: [{ x: 0.1, y: 0.5, radius: 0.0305 }] },
     inlet: { speed: 0.5, velocityX: profileParabolic(0.5) },      // mean 0.5, peak 0.75
     wall: { temperature: 80 },

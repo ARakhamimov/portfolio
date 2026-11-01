@@ -2,11 +2,9 @@
 // The display kernel: one invocation per pixel, turning the solved fields into
 // the picture.
 //
-// The first part reads off a system what the shader can draw (its species,
-// materials and overlays); the rest writes the shader, one section per
-// function, in the order makeDrawCode lists them, ending with one arm per view
-// in the order of VIEWS (views.js). Nothing in the solver reads any of it, so a
-// first read can skip the file.
+// The first part reads off a system what the shader can draw; the rest writes
+// the shader in the order makeDrawCode lists, ending with one arm per view.
+// Nothing in the solver reads any of it, so a first read can skip the file.
 
 'use strict';
 
@@ -38,11 +36,8 @@ function drawOfferedSpecies(system) {
 }
 
 // Materials
-//
-// A case whose coefficient is fixed in space names the materials it is made
-// of: a label, a color, and either the factor its profile takes there or, in a
-// painted case, the paint it draws. drawMaterials is the one list the shader's
-// arm and the legend both read.
+
+// drawMaterials is the one list the shader's arm and the legend both read.
 
 const DRAW_MATERIAL_HATCHES = ['none', 'vertical', 'horizontal', 'rising', 'falling'];
 
@@ -88,10 +83,9 @@ function drawTermValues(system) {
     return values;
 }
 
-// The material map of a painted case: the unpainted material first, then one
-// per paint with a color at the weakest strength and a dark one at the
-// strongest. A material whose paint the running system does not read is still
-// drawn, since a viewer may paint before choosing a reaction.
+// The material map of a painted case. A material whose paint the running
+// system does not read is still drawn, since a viewer may paint before
+// choosing a reaction.
 function drawPaintedMap(system, read) {
     const name = system.name || 'a system';
     const materials = system.materials;
@@ -315,12 +309,9 @@ function drawPixelToCellCode() {
 
 // Sampling
 
-// Every bilinear sampler is drawBilinearPoints then drawBilinearMix: one
-// rule, with an offset per storage location. A location's first point sits
-// `offset` cells from the domain edge (a center at 0.5, a face or a corner on
-// the edge at 1.0, counting from the ghost ring), and it has `extra` more
-// points than cells along an axis. Clamped to the interior, never the ghost
-// ring.
+// Every bilinear sampler is drawBilinearPoints then drawBilinearMix: one rule,
+// with an offset per storage location (GRID_POINT_OFFSETS). Clamped to the
+// interior, never the ghost ring.
 function drawSamplingCode(shader) {
     const faceSampler = (name, field, axis) => {
         const x = axis === 'x';
@@ -391,9 +382,8 @@ function drawContourCode(shader) {
     // language=WGSL
     return `
         // A line of constant width at every multiple of the interval: the
-        // distance to the nearest multiple, over the field's change per pixel.
-        // The ink is chosen against the color under it, since a line carries
-        // nothing in its own color.
+        // distance to the nearest multiple over the field's change per pixel.
+        // The ink is chosen against the color under it.
         fn drawContour(color : vec3f, here : f32, right : f32, below : f32, interval : f32) -> vec3f {
             if (!(interval > 0.0)) { return color; }
             let slope = length(vec2f(right - here, below - here)) / interval;
@@ -426,11 +416,9 @@ function drawVorticitySamplerCode() {
 
 // Streamlines and contours
 
-// psi is summed from the face values along the top row, then down each column
-// (y runs down, so d(psi)/dy = u and d(psi)/dx = -v), and held at the corners
-// in a center-shaped display array, corner (column, row) in slot (column, row).
-// Written only where the stream function is allocated, which is where
-// divergenceFreePair offers a pair; the frame loop dispatches them on the same test.
+// psi summed along the top row, then down each column (y runs down, so
+// d(psi)/dy = u and d(psi)/dx = -v), corner (column, row) in slot (column, row).
+// Written only where divergenceFreePair offers a pair.
 function drawStreamlineCode(shader) {
     const { settings } = shader;
     if (!shader.has('streamFunction')) return drawContourCode(shader);
@@ -497,10 +485,8 @@ function drawPotentialCode(shader) {
             return ${appliedAt};
         }
 
-        // A wave function's potential energy shape, read where the solver
-        // reads it, at cell centers on the level shown, then drawn as every
-        // center field is: the cell's own value, or smoothed between the four
-        // centers around the pixel when bilinear is on.
+        // A wave function's potential energy shape, read at cell centers as the
+        // solver reads it, then drawn as every center field is.
         fn drawPotentialShapeOfCell(cell : vec2u) -> f32 {
             let position = (vec2f(cell) - vec2f(0.5)) * grid.spacing[controls.viewLevel];
             return ${shape ? shape.wgsl : '0.0 * position.x'};
@@ -545,9 +531,9 @@ ${shader.has('potential') ? `
 
 // Hatching
 
-// One direction per pixel, chosen by what the color means in the view, and a
+// One direction per pixel, by what the color means in the view, and a
 // symmetric swing in lightness that keeps the hue. The period is in screen
-// pixels, converted through hatchScale.
+// pixels, through hatchScale.
 function drawHatchingCode(shader) {
     const { settings } = shader;
     const speciesHatchCalls = DRAW_SPECIES_FIELDS
@@ -704,11 +690,15 @@ function drawColorCode(shader) {
             return vec4f(mix(${neutral}, drawDirectionHue(vector), saturation), 1.0);
         }
 
-        // Against the peak the solver measured on this level; the cutoff, off
-        // by default, blanks what is below a fraction of it.
+        // The peak speed measured on the level shown, which the velocity view's
+        // color and hatching are scaled to.
+        fn drawPeakSpeed() -> f32 {
+            return max(controls.velocityMax[controls.viewLevel], 1.0e-12);
+        }
+
         fn drawVelocityColor(velocity : vec2f) -> vec4f {
             let speed = sqrt(velocity.x * velocity.x + velocity.y * velocity.y);
-            let peak = max(controls.velocityMax[controls.viewLevel], 1.0e-12);
+            let peak = drawPeakSpeed();
             if (controls.velocityCutoff > 0.0 && speed < controls.velocityCutoff * peak) {
                 return vec4f(${neutral}, 1.0);
             }
@@ -771,11 +761,9 @@ ${typeCases}
 
 // Cell numbers
 
-// The cell Peclet number, the upwind blend and the Courant number, evaluated
-// at cell centers from the face-averaged velocity. Each advected field's
-// diffusivity arm goes through the resolver the dictionary uses, so a slider
-// moves the picture as it moves the solver; a system with no advection gets
-// one arm returning one, and is never offered these views.
+// At cell centers from the face-averaged velocity. Each diffusivity goes
+// through the resolver the dictionary uses, so a slider moves the picture as it
+// moves the solver.
 function drawCellNumberCode(shader) {
     const advected = drawAdvectedEquations(shader.system);
     const diffusivityCases = advected.length === 0
@@ -823,9 +811,8 @@ ${cases}
 
 // Direction arrows
 
-// A glyph per screen-pixel cell of the arrow pitch, sampled once at its own
-// center, drawn as a light body in a dark outline, its length the square root
-// of the vector's size against a peak.
+// A glyph per cell of the arrow pitch, sampled once at its center, a light body
+// in a dark outline, its length the square root of the size against a peak.
 function drawArrowCode(shader) {
     const { settings } = shader;
     const vector = drawVectorPair(shader.system);
@@ -903,10 +890,9 @@ function drawArrowCode(shader) {
 
 // The kernel
 
-// One arm per view, in the order of VIEWS, written by drawViewArms. Each arm
-// sets the color and what a hatch would mean in it; the hatch, the streamlines
-// and the arrows are laid over whatever it produced, and there is one store at
-// the end.
+// One arm per view, in the order of VIEWS. Each sets the color and what a
+// hatch means in it; the hatch, streamlines and arrows go over it, and there is
+// one store at the end.
 function drawKernelCode(shader) {
     const { settings } = shader;
     const arms = drawViewArms(shader);
@@ -1023,7 +1009,7 @@ function drawViewArms(shader) {
                         drawBilinearIfOn(yFaceToCenter(level, cell.x, cell.y), drawSampleYVelocity(pixel)));
                     ${drawBrokenGuard('velocity.x', 'velocity.y')}
                     color = drawVelocityColor(velocity);
-                    hatch = drawDirectionHatch(velocity, ${maxSpeed});`,
+                    hatch = drawDirectionHatch(velocity, drawPeakSpeed());`,
         // language=WGSL
         'x-velocity': `
                     let velocityX = drawBilinearIfOn(xFaceToCenter(level, cell.x, cell.y), drawSampleXVelocity(pixel));
@@ -1153,9 +1139,8 @@ function drawViewArms(shader) {
     };
 }
 
-// Each species divided by its own full scale, the ones not chosen zeroed so a
-// species keeps its mixture hue alone, and undershoot counted as none. A
-// species the case does not allocate reads as none.
+// Each species over its own full scale, the ones not chosen zeroed so a species
+// keeps its mixture hue alone; undershoot and an unallocated species read none.
 function drawSpeciesArm(shader) {
     const { settings } = shader;
     const held = DRAW_SPECIES_FIELDS.filter(shader.has);
@@ -1183,10 +1168,8 @@ function drawSpeciesArm(shader) {
                     }`;
 }
 
-// The material arm: a profile case reads its shape at the cell's center on the
-// level shown, so a boundary is the staircase that level reads; a painted case
-// is drawPaintedArm. With nothing fixed in space the arm is white, and the
-// view is never offered.
+// A profile case reads its shape at the cell's center on the level shown, so a
+// boundary is the staircase that level reads; a painted case is drawPaintedArm.
 function drawMaterialArm(shader) {
     const materials = drawMaterials(shader.system);
     // language=WGSL
@@ -1211,11 +1194,9 @@ function drawMaterialArm(shader) {
                     hatch = vec2f(f32(direction), 1.0);`;
 }
 
-// A painted case: what is at the cell's center, the catalyst array there or
-// the mean of its four faces' porous drag (the momentum rows read the faces),
-// darker with strength on a log scale from x1 to the strongest. Where layers
-// overlap the cell takes the mean of their colors. A solid cell never reaches
-// the arm: the kernel draws every solid cell the same before choosing a view.
+// The catalyst at the cell's center, or the mean of its four faces' porous
+// drag (the momentum rows read the faces), darker with strength on a log scale.
+// Overlapping layers take the mean of their colors.
 function drawPaintedArm(materials, settings) {
     const [bare, ...painted] = materials.entries;
     const strongest = wgslLiteral(settings.paintedStrongest);

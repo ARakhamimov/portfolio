@@ -58,9 +58,8 @@ function caseSummary(preset, plate, peakSpeed) {
                    caseStabilityStep(preset.coefficients.massDiffusivity, peak))
         : null;
 
-    // Da = k C L / U on a unit feed, built from the rate the substrate leaves
-    // at: a Monod case's growth rate over its yield, and every reaction that
-    // consumes the feed, each at the feed temperature.
+    // Da = k C L / U on a unit feed, from the rate the substrate leaves at: every
+    // reaction that consumes the feed, each at the feed temperature.
     const feedFactor = preset.coefficients.temperatureSensitivity > 0
         ? Math.exp(preset.coefficients.temperatureSensitivity
             * (preset.inlet.temperature - preset.coefficients.referenceTemperature))
@@ -169,8 +168,8 @@ function caseSummary(preset, plate, peakSpeed) {
 
 // The step law
 
-// K in the step law dt < K D / (theta u^2). It belongs to the advection entry's
-// split between numerator and denominator, not to any one case.
+// K in the step law dt < K D / (theta u^2). It belongs to how the advection
+// entry splits between its value and its diagonal, not to any one case.
 const CASE_STEP_CONSTANT = 150;
 
 // Above this nominal cell Peclet number the step law was measured not to bound
@@ -185,10 +184,9 @@ function caseStabilityStep(diffusivity, speed) {
 
 // The tables
 
-// Each row is [name, value, word, flag]: the word names the regime the value
-// is in, and the flag, 'on' or 'off', colors it. Both may be left out. The
-// word shares the value's cell, so it moves under the value when the line is
-// full instead of pushing the table past the card.
+// Each row is [name, value, word, flag], the word naming the regime and the flag
+// coloring it. The word shares the value's cell, so it wraps under the value
+// instead of pushing the table past the card.
 function panelFillTable(element, rows) {
     if (!element) return;
     element.innerHTML = rows
@@ -232,10 +230,9 @@ function panelAtPeak(requested, atPeak, digits, blended) {
         : panelFixed(requested, digits);
 }
 
-// The tables of the panel. The short one is what a viewer needs to trust the
-// picture; the rest are developer readouts. A row appears only where the
-// case's own equations define the number it reports: no Reynolds number
-// without a momentum row, no cell Peclet number without an advection term.
+// The short table is what a viewer needs to trust the picture; the rest are
+// developer readouts. A row appears only where the case's own equations define
+// its number.
 function panelRefresh(plate, system, options, state, telemetry) {
     const preset = appActivePreset();
     const peak = telemetry.velocityMax ? telemetry.velocityMax[0] : NaN;
@@ -279,10 +276,9 @@ function panelRefresh(plate, system, options, state, telemetry) {
     panelFillTable(document.getElementById('keyState'), keys.map(([key, what]) => [`<kbd>${key}</kbd>`, what]));
 }
 
-// The case's own numbers, each with the regime it puts the case in. Reynolds
-// is given as requested and at the peak speed, which is the worst case in the
-// domain since the blend is local; a case that asks for zero viscosity asks
-// for an infinite Reynolds number.
+// The case's own numbers, each with its regime. Reynolds is given as requested
+// and at the peak speed, the worst case since the blend is local; zero
+// viscosity asks for an infinite Reynolds number.
 function panelCaseState(plate, preset, summary, nusselt = null) {
     const rows = [];
 
@@ -328,10 +324,10 @@ function panelCaseState(plate, preset, summary, nusselt = null) {
     // The number that says why a reacting case looks the way it does.
     if (summary.damkohler > 0) {
         rows.push([summary.paintedDamkohler !== null ? 'Damkohler, fluid' : 'Damkohler',
-            summary.damkohler.toFixed(1), panelRegime(summary.damkohler)]);
+            displayNumberText(summary.damkohler), panelRegime(summary.damkohler)]);
     }
     if (summary.paintedDamkohler !== null) {
-        rows.push(['Damkohler, catalyst', `${summary.paintedDamkohler.toFixed(1)} at x1`,
+        rows.push(['Damkohler, catalyst', `${displayNumberText(summary.paintedDamkohler)} at x1`,
             panelRegime(summary.paintedDamkohler)]);
     }
     if (summary.paintedPermeability !== null) {
@@ -341,7 +337,7 @@ function panelCaseState(plate, preset, summary, nusselt = null) {
             + `${thickest.toFixed(1)} to ${thinnest.toFixed(1)} cells`, ...panelResolved(thickest, 2)]);
     }
     // A margin only where the step law was measured to bound anything; above
-    // that, naming the regime is the checkable statement (cases.js).
+    // that, naming the regime is the checkable statement.
     if (summary.momentumAdvects) {
         rows.push(summary.stepLawApplies
             ? ['time step', `${summary.stepMargin.toFixed(1)}x margin`,
@@ -407,10 +403,9 @@ function panelFixed(value, digits) {
 
 // The diffusivity row
 
-// A diffusivity the medium varies has no single value, so the panel reports the
-// range it takes: over the layers a profile declares, sampled on the grid the
-// profile check uses, and between the coldest and hottest boundary temperature
-// where it depends on temperature. A uniform one is the number it always was.
+// A diffusivity the medium varies is reported as its range: over a profile's
+// layers on the profile check's grid, and between the coldest and hottest
+// boundary temperature where it depends on temperature.
 function panelDiffusivityRange(preset, kind) {
     const heat = kind === 'heat';
     const base = heat ? preset.coefficients.thermalDiffusivity : preset.coefficients.massDiffusivity;

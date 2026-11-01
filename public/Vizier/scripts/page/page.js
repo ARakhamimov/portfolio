@@ -41,7 +41,7 @@ async function start() {
     // 3. The controls, drawn for that case.
     installControls();
 
-    // 4. A frame per animation frame, and the telemetry and watchdog once a second.
+    // 4. A frame per animation frame; telemetry and watchdogs once a second.
     requestAnimationFrame(tick);
     setInterval(everySecond, 1000);
 }
@@ -119,9 +119,8 @@ async function buildScene({ keepView = true } = {}) {
 
     const largest = Math.max(...BUFFER_GROUPS.map((g) => plate.bufferBytes(g.name)));
     const totalBytes = BUFFER_GROUPS.reduce((sum, g) => sum + plate.bufferBytes(g.name), 0);
-    // The memory watchdog: the device's stated limits are checked here, and
-    // the allocation itself is caught by the error scopes below, since
-    // WebGPU gives no figure for how much memory a device has.
+    // The memory watchdog: the device's stated limits here, the allocation by
+    // the error scopes below, since WebGPU gives no figure for device memory.
     const limit = Math.min(device.limits.maxStorageBufferBindingSize, device.limits.maxBufferSize);
     if (largest > limit) {
         throw new Error(
@@ -187,6 +186,7 @@ async function buildScene({ keepView = true } = {}) {
             (message) => say(message, true)),
         reader: new StateReader(device, buffers, plate),
         storage: `${(totalBytes / 1048576).toFixed(1)} MiB, largest ${(largest / 1048576).toFixed(1)}`,
+        speedWatch: { secondsRunning: 0, slowSeconds: 0, done: false },
     };
 
     // Only after everything above has succeeded. A failed rebuild leaves the
@@ -468,10 +468,9 @@ function refresh() {
 
 // The sandbox editor
 
-// The sandbox editor's edits. An edit is a new layout, asked of
-// sandboxProblems first; an accepted one re-marks the running plate and
-// writes the grid and coefficient buffers, never a rebuild, and the solver
-// carries on from the fields it has.
+// An accepted edit re-marks the running plate and writes the grid and
+// coefficient buffers, never a rebuild, so the solver carries on from the
+// fields it has.
 const layoutEdit = {
     apply: applyLayout,
     remember(before) { layoutHistory.push(before); },
@@ -579,14 +578,13 @@ async function everySecond() {
     await scene.telemetry.read();
     if (!options.paused && monitorsMeasureWallHeatFlux(scene.system)) scene.telemetry.sampleHeatFlux();
     watchHealth();
+    watchSpeed();
     refresh();
 }
 
-// The divergence watchdog. Once a second the telemetry brings back each
-// solved field's largest magnitude; a NaN, an infinity or a value past the
-// ceiling stops the run. The usual cause is a slider asking more of the
-// fixed time step than it can carry, so the last coefficients and sandbox
-// layout that ran cleanly are put back and the case restarts.
+// The divergence watchdog: a NaN, an infinity or a value past the ceiling in any
+// solved field stops the run, puts back the last coefficients and layout that
+// ran cleanly, and restarts the case.
 
 // Far above anything a case produces and far below where a diverging run is
 // headed.
@@ -630,6 +628,60 @@ function watchHealth() {
     } else {
         say(`The run diverged: ${what}. Paused; Reset restarts the case.`, true);
     }
+}
+
+// The speed watchdog: browsers say too little about a GPU to tell beforehand, so
+// a frame rate that stays low pauses the run and asks once, on the default
+// mesh, whether to step down a mesh or keep this one (remembered).
+
+// Frames drawn a second, held for some seconds in a row after a warm-up that
+// skips a new case's first slow frames.
+const SPEED_FLOOR = 20;
+const SPEED_WARMUP_SECONDS = 3;
+const SPEED_SLOW_SECONDS = 3;
+const SPEED_KEEP_KEY = 'vizierKeepResolution';
+
+function watchSpeed() {
+    const watch = scene.speedWatch;
+    if (watch.done) return;
+    // A hidden tab draws no frames, and a recording or a rebuild draws
+    // fewer, none of which says anything about the device.
+    if (options.paused || busyRebuilding || capture.recording || document.hidden) {
+        watch.slowSeconds = 0;
+        return;
+    }
+    const lower = appResolutions().find((cells) => cells < scene.plate.interior[0]);
+    if (scene.plate.interior[0] !== appBasePreset().solver.cells || lower === undefined || speedKept()) {
+        watch.done = true;
+        return;
+    }
+    watch.secondsRunning++;
+    if (watch.secondsRunning <= SPEED_WARMUP_SECONDS) return;
+    watch.slowSeconds = state.fps < SPEED_FLOOR ? watch.slowSeconds + 1 : 0;
+    if (watch.slowSeconds < SPEED_SLOW_SECONDS) return;
+
+    watch.done = true;
+    options.paused = true;
+    say(`This case draws ${state.fps} frames a second here, too few to watch it move, so it `
+        + `is paused. ${lower} cells is a quarter of the work. `
+        + '<button type="button" id="speedLower">Lower the resolution</button> '
+        + '<button type="button" id="speedKeep">Keep this resolution</button>', false, true);
+    document.getElementById('speedLower').addEventListener('click', () => {
+        options.paused = false;
+        selectResolution(lower);
+    });
+    document.getElementById('speedKeep').addEventListener('click', () => {
+        // Storage can be refused, as in a private window; the question then
+        // comes back on the next visit.
+        try { localStorage.setItem(SPEED_KEEP_KEY, '1'); } catch (error) { /* not remembered */ }
+        options.paused = false;
+        say('');
+        refresh();
+    });
+}
+
+function speedKept() {
+    try { return localStorage.getItem(SPEED_KEEP_KEY) === '1'; } catch (error) { return false; }
 }
 
 // Messages
