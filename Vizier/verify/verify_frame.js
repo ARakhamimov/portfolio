@@ -12,13 +12,10 @@ let failures = 0;
 const fail = (message) => { console.log(`  FAIL  ${message}`); failures++; };
 
 // Every kernel the frame loop asks for exists
-//
-// The generator emits kernels from the system and the frame loop dispatches
-// them by name. A system with no velocity generates no speed scan, so a
-// dispatch the emitter did not generate fails at pipeline lookup in the
-// browser. The emitter and the loop both ask monitorsMeasureSpeed, and this
-// holds them to it by running the real frame against a recording stub, as
-// countDispatches in page.js does to count them.
+
+// A dispatch the emitter did not generate fails at pipeline lookup in the
+// browser, so the real frame runs against a recording stub, as countDispatches
+// in page.js does.
 console.log('');
 console.log('EVERY DISPATCHED KERNEL IS GENERATED');
 {

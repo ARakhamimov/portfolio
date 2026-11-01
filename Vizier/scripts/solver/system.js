@@ -70,11 +70,9 @@ function schurFaceDiagonalCode(equation) {
         .map((term) => TERM_DICTIONARY[term.term].schurDiagonal(term, equation, coefficient)).join(' + ');
 }
 
-// schurDiagonal_<face field> for each face row, and relaxConstraint_<field>:
-// Richardson on the constraint row, p = p + step r, with the step taken per
-// point as c h^2 over the summed compliance 1/d of the four faces the row's
-// divergence reads. A face the system does not solve adds nothing; a
-// prescribed face is counted, which errs toward a smaller step.
+// relaxConstraint_<field>: p = p + step r, the step c h^2 over the summed
+// compliance 1/d of the four faces the divergence reads. A prescribed face is
+// counted, which errs toward a smaller step.
 function makeSystemCode(system, arrayNamesFor) {
     if (system.relaxation.scheme !== SCHUR_RELAXATION) return '';
     const constraint = system.equations.find((equation) => equation.constraint);

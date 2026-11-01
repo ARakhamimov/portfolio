@@ -11,10 +11,9 @@
 
 // What a case declares
 
-// Every key a case may write, in its group, with the value a case that does
-// not write it gets. A key that has no sensible default is declared undefined
-// with the reason, so that this list is complete: a key missing here fails when
-// the presets are read (caseCheckKeys), not as a NaN in a buffer.
+// Every key a case may write, with its default; one with no sensible default is
+// undefined. A key missing here fails when the presets are read
+// (caseCheckKeys), not as a NaN in a buffer.
 function caseDefaults() {
     return {
         view: 'species',                        // the view the case opens on
@@ -41,9 +40,9 @@ function caseDefaults() {
             cyclesPerFrame: 3,
             timeStep: CASE_TIME_STEP,
             stepsPerFrame: 1,
-            // 'spacingSquared' for a case whose step is held near h^2: the step
-            // is declared at the case's own mesh and moves with the square of
-            // the spacing when the resolution is changed (appActivePreset).
+            // 'spacing' near a Courant limit, 'spacingSquared' near h^2: the step
+            // is declared at the case's own mesh and moves with the resolution
+            // (appMeshScaled).
             timeStepScaling: undefined,
             constraintStep: 0.5,                // c in the Schur step
         },
@@ -88,18 +87,15 @@ function caseDefaults() {
             packets: [],                        // { x, y, width, kx, ky } each, summed: a wave function's start
         },
 
-        // The physical constants, each with its default from
-        // COEFFICIENT_CONSTANTS. A zero leaves the term out and its slider off
-        // the page, so a case that forgets a constant it needs fails loudly.
+        // The physical constants, defaults from COEFFICIENT_CONSTANTS. A zero
+        // leaves the term out and its slider off the page.
         coefficients: Object.fromEntries(COEFFICIENT_CONSTANTS
             .filter((constant) => !constant.path).map((constant) => [constant.name, constant.default])),
 
         feeds: [],                              // region sources, { field, rate, target, at, wgsl }
         charges: [],                            // disks { x, y, radius, density }
-        // Every slider the case shows, by name, as [lowest, highest]. A
-        // temperature moves linearly between the two, anything else in equal
-        // ratios. Listing wallTemperature, inletTemperature, heaterTemperature
-        // or thermalDiffusivity also turns that literal into a slot.
+        // Every slider the case shows, as [lowest, highest]. Listing a literal
+        // (a temperature or thermalDiffusivity) also turns it into a slot.
         sliders: {},
         paintable: false,                       // whether a viewer may paint regions
 
@@ -165,10 +161,9 @@ function caseCheckKeys(preset, defaults) {
     return preset;
 }
 
-// Each case is a file in scripts/cases/, listed in manifest.js in the order the
-// case box shows them. A file registers a function that builds its
-// declaration, called when the presets are read: a declaration reads names
-// another file defines, so it cannot be built while files are still loading.
+// A case file registers a function, called when the presets are read: a
+// declaration reads names another file defines, so it cannot be built while
+// files are still loading.
 const CASE_BUILDERS = [];
 
 function caseRegister(build) {
@@ -176,10 +171,9 @@ function caseRegister(build) {
     casePresetList = null;
 }
 
-// A case saved from the sandbox (sandboxExportText): the sandbox's own
-// declaration with the saved layout, opening on the saved reaction with the
-// saved slider values. It stays in the sandbox category, so it can still be
-// edited.
+// A case saved from the sandbox (sandboxExportText): the sandbox's declaration
+// with the saved layout, reaction and sliders, kept in the sandbox category so
+// it can still be edited.
 function caseRegisterExported(data) {
     const build = () => {
         const base = CASE_BUILDERS.filter((other) => !other.exported).map((other) => other())
@@ -235,11 +229,9 @@ function caseCategoryOf(declaration) {
     return listed.name;
 }
 
-// The reactions every case that feeds A and B offers: none, then the three
-// rate laws at one Damkohler number. Michaelis-Menten runs at the mass action
-// rate, and Monod's substrate leaves at its growth rate over its yield, which
-// is the mass action rate again. `shared` is what every choice keeps that a
-// special reaction beside them must not, such as a wall temperature.
+// None, then the three rate laws at one Damkohler number: Monod's growth rate
+// over its yield is the mass action rate again. `shared` is what every choice
+// keeps that a special reaction beside them must not, such as a wall temperature.
 function caseStandardReactions(rate, shared = {}) {
     return [
         { ...shared, name: 'none', label: 'none',
@@ -264,15 +256,9 @@ function caseStandardReactions(rate, shared = {}) {
     ];
 }
 
-// Every case expanded into the presets the page runs, one per reaction. A
-// pair's id is the case id and the reaction's name run together, except that
-// the pair with no reaction keeps the bare case id.
-//
-// T0 is set here, from the case's own feed temperature, and never moves with a
-// slider: moving T0 with s held fixed describes a different activation energy.
-//
-// Built on the first read, once every case file has loaded, and again after a
-// case registers. Frozen, so that a preset is a value every reader shares.
+// One preset per case and reaction, frozen, built on the first read and again
+// after a case registers. T0 is the case's feed temperature and never moves:
+// moving T0 with s held fixed describes a different activation energy.
 let casePresetList = null;
 
 function casePresets() {
@@ -290,7 +276,7 @@ function caseBuildPresets() {
     const defaults = caseDefaults();
     const presets = [];
     for (const { reactions, defaultReaction, exported, ...declared } of caseCases()) {
-        // The category goes where a case file used to write it, after its label.
+        // The category, from the manifest, goes after the label.
         const { id, label, ...rest } = declared;
         const base = { id, label, category: caseCategoryOf({ ...declared, exported }), ...rest };
         if (reactions && !reactions.some(({ name }) => name === defaultReaction)) {
@@ -312,7 +298,7 @@ function caseBuildPresets() {
             if (preset.coefficients.referenceTemperature === undefined) {
                 preset.coefficients.referenceTemperature = preset.inlet.temperature;
             }
-            presets.push(caseCheckSliders(caseCheckHierarchy(caseCheckKeys(preset, defaults))));
+            presets.push(caseCheckSliders(caseCheckTimeStepScaling(caseCheckHierarchy(caseCheckKeys(preset, defaults)))));
         }
     }
     return presets;
@@ -331,6 +317,16 @@ function caseCheckHierarchy(preset) {
         || !(preset.solver.cells > preset.solver.coarsestCells)) {
         throw new Error(`${preset.id}: cells ${preset.solver.cells} and coarsestCells `
             + `${preset.solver.coarsestCells} must both be mesh sizes, the coarsest below the finest`);
+    }
+    return preset;
+}
+
+// An unknown scaling would leave the step fixed at every mesh without a word.
+function caseCheckTimeStepScaling(preset) {
+    const scaling = preset.solver.timeStepScaling;
+    if (scaling !== undefined && !(scaling in CASE_TIME_STEP_POWERS)) {
+        throw new Error(`${preset.id}: timeStepScaling '${scaling}' is not one of `
+            + Object.keys(CASE_TIME_STEP_POWERS).join(', '));
     }
     return preset;
 }
@@ -418,6 +414,10 @@ function caseCheckSliders(preset) {
 const CASE_THETA = 0.55;
 const CASE_TIME_STEP = 1 / 60;
 
+// The power of the spacing a declared step moves with at another mesh: the
+// spacing for a Courant limit, its square for an h^2 limit.
+const CASE_TIME_STEP_POWERS = { spacing: 1, spacingSquared: 2 };
+
 // Geometry and ports
 
 // Also how the sandbox applies an edit: this runs again on the classified
@@ -494,7 +494,7 @@ function casePortRanges(ports) {
 // unused port ends below where any boundary point lies.
 function casePortSlotValues(ports) {
     const values = {};
-    for (let k = 0; k < boundaryPortCount(); k++) {
+    for (let k = 0; k < BOUNDARY_PORT_COUNT; k++) {
         const port = ports[k];
         const range = port ? casePortRanges([port])[0] : { start: -2, end: -2 };
         const feeds = port && port.type === INLET;

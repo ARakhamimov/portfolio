@@ -11,8 +11,10 @@ caseRegister(() => ({
         + 'reflects with its sign flipped from the grounded left and right '
         + 'edges, and unflipped from the open top and bottom.',
     system: { physics: 'telegraph' },
-    // A Courant number c dt / h of 0.25 at 256 cells.
-    solver: { coarsestCells: 32, timeStep: 1 / 1024, stepsPerFrame: 4, cyclesPerFrame: 2 },
+    // A Courant number c dt / h of 0.25 at every mesh, under the lagged pair's
+    // limit of about 0.64.
+    solver: { coarsestCells: 32, timeStep: 1 / 1024, stepsPerFrame: 4, cyclesPerFrame: 2,
+        timeStepScaling: 'spacing' },
     // An OUTLET holds the voltage at zero, a grounded edge; a WALL carries no
     // current, an open one.
     geometry: { edges: { left: OUTLET, right: OUTLET, top: WALL, bottom: WALL } },

@@ -18,10 +18,9 @@ caseRegister(() => ({
     // Off the midline by half a cell, so the street starts.
     geometry: { solidCircles: [{ x: 0.2, y: 0.502, radius: 0.05 }] },
     inlet: { speed: 0.5, velocityX: profileParabolic(0.5) },      // mean 0.5, peak 0.75
-    // Re 100 sheds; Rm 10 lets the street sweep the lines while its current
-    // sheets stay several cells wide; N about 0.6 acts on the street without
-    // stopping it. The slider's top is near the step limit the lagged coupling
-    // sets.
+    // Re 100 sheds; Rm 10 lets the street sweep the lines with current sheets
+    // several cells wide; N about 0.6 brakes the street without stopping it.
+    // The slider's top is near the lagged coupling's step limit.
     coefficients: {
         viscosity: 0.0005,                      // Re 100 on the diameter, 0.1
         magneticDiffusivity: 0.005,             // Rm 10

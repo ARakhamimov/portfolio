@@ -9,8 +9,8 @@ caseRegister(() => ({
     label: 'Layered membrane',
     view: 'species',
     note: 'A dense skin on a porous support, fed on the left and swept clean '
-        + 'on the right. Almost the whole concentration drop sits across the '
-        + 'skin, and the pinhole in it lets the feed straight through.',
+        + 'on the right. More than half the concentration drop sits across '
+        + 'the thin skin, and the pinhole in it lets the feed straight through.',
     system: { physics: 'permeation' },
     solver: { cells: 128, timeStep: 0.02, stepsPerFrame: 2 },
     geometry: { edges: { left: INLET, right: WALL, top: SYMMETRY, bottom: SYMMETRY } },

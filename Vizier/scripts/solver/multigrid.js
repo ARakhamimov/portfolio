@@ -5,17 +5,14 @@
 //
 // Restrict, then fill: restriction writes every coarse interior point, walls
 // included, and the coarse boundary fill then overwrites them from the type.
-// The V-cycle at the end orders the dispatches; the FAS steps are two of the
-// kernels it dispatches, per equation.
 
 'use strict';
 
 // Restriction and prolongation
 
-// restrict_<tag>, called at the coarse level. A coarse cell averages its four
-// fine cells. A coarse face averages the two fine faces along it and takes them
-// as they are across it, so the flux through it is exact and the discrete
-// divergence commutes with restriction.
+// restrict_<tag>: a coarse cell averages its four fine cells, and a coarse face
+// the two fine faces along it, so the flux through it is exact and the
+// discrete divergence commutes with restriction.
 function makeRestrictCode(tag, location, array) {
     const fine = (index, column, row) => `${array}[${index}(level - 1u, ${column}, ${row})]`;
     const sums = [
@@ -37,11 +34,9 @@ function makeRestrictCode(tag, location, array) {
     `;
 }
 
-// prolong_<tag>: the coarse change at a fine point, bilinear over two coarse
-// points along each axis. A center's axis, and a face's axis along the face,
-// weigh them 3/4 and 1/4; a face's axis across the face copies the coarse face
-// it lies on or averages the two it lies between. `array` is the coarse change,
-// read with no bounds test and no test on the type.
+// prolong_<tag>: bilinear, 3/4 and 1/4 along a center's axes and along a face,
+// a copy or a plain average across one. No bounds or type test: beside a
+// boundary the second point is a ghost, whose change the boundary rule set.
 function makeProlongCode(tag, location, array) {
     const alongX = location === 1 ? 'coarsePointsAlongFaceNormalAxis' : 'coarsePointsAlongCellLikeAxis';
     const alongY = location === 2 ? 'coarsePointsAlongFaceNormalAxis' : 'coarsePointsAlongCellLikeAxis';
@@ -62,10 +57,8 @@ function makeProlongCode(tag, location, array) {
 }
 
 // The two coarse points a fine index reads along one axis, and their weights.
-// The first is at (fine + 1) / 2 rounded down; the second sits beside it, on
-// the side the fine point is. Where a fine face lies on a coarse one, the
-// coarse point is named twice with a second weight of 0, so every prolongation
-// is the same four-term sum.
+// Where a fine face lies on a coarse one, the coarse point is named twice with
+// a second weight of 0, so every prolongation is the same four-term sum.
 function makeTransferHelperCode() {
     // language=WGSL
     return `
@@ -96,15 +89,9 @@ function makeTransferHelperCode() {
 
 // The Full Approximation Scheme
 
-// buildCoarseRightHandSide_<field>: the coarse right-hand side
-// f_H = N_H(R v_h) + R r_h, the coarse operator of the restricted solution plus
-// the restricted residual. It runs after the coarse fill, never against
-// restricted boundary values.
-//
-// computeChange_<field>: the change the coarse level made, its solution now
-// minus the copy taken when it was restricted, written over that copy. There is
-// no test on the kind of point: a prescribed point comes out at 0 by itself,
-// and an outflow face must not be forced to 0.
+// f_H = N_H(R v_h) + R r_h, built after the coarse fill. The change has no
+// test on the kind of point: a prescribed point comes out 0 by itself, and an
+// outflow face must not be forced to 0.
 function makeFasCode(equation, arrayNames) {
     const field = equation.field;
     const index = indexFunctionAt(equation.location);
@@ -126,14 +113,12 @@ function makeFasCode(equation, arrayNames) {
 }
 
 // The V-cycle, as dispatches
-//
-// The order of the dispatches a cycle is made of. Each step dispatches one
-// kernel per equation through the CycleRunner in runtime.js, which owns the
-// compute pass; the kernels themselves are generated in kernels.js.
 
-// One red-black sweep of every field: fill the boundaries, then relax the
-// red points and the black points. The pressure row has no diagonal of its
-// own, so it is relaxed in a single pass.
+// Each step dispatches one kernel per equation through the CycleRunner in
+// runtime.js; the kernels themselves are generated in kernels.js.
+
+// One red-black sweep of every field. The constraint row reads no neighbor's
+// pressure, so it is relaxed in a single pass.
 function sweep(runner, level) {
     runner.fillBoundaries(level);
     for (const equation of runner.system.equations) {
@@ -199,10 +184,12 @@ function vCycle(runner, options) {
         buildCoarseRightHandSide(runner, coarser);
     }
 
-    // The coarsest level is smoothed many times in place of an exact solve.
+    // The coarsest level is smoothed many times in place of an exact solve,
+    // then filled, as every level is before its change is taken.
     runner.setLevel(coarsest);
     runner.measurePeakSpeed(coarsest);
     smooth(runner, coarsest, options.coarseSmooth);
+    runner.fillBoundaries(coarsest);
 
     for (let level = coarsest - 1; level >= 0; level--) {
         runner.setLevel(level + 1);
@@ -210,6 +197,8 @@ function vCycle(runner, options) {
         runner.setLevel(level);
         addCoarseChangeToFiner(runner, level);
         runner.measurePeakSpeed(level);
+        // The fill leaves the ghosts current: on the finest level for the
+        // picture and the next frame, on a coarser one for its change.
         smooth(runner, level, options.postSmooth);
         runner.fillBoundaries(level);
     }

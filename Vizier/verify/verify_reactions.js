@@ -35,12 +35,9 @@ function heading(text) {
     console.log('-'.repeat(text.length));
 }
 
-// The reaction lines are gathered from tagged terms, so what can go wrong is a
-// term with no tag, which drops out of the line, or a reaction whose terms
-// disagree about what the rate multiplies. Both are checked over every preset,
-// and the line read back as mass action must give each tagged term's rate: a
-// species' net change per unit of reaction, times the reference rate, is the
-// rate that species' term declares.
+// What can go wrong is a term with no tag, which drops out of the line, or terms
+// that disagree about what the rate multiplies. Read back as mass action, the
+// line must give each tagged term's rate.
 const REACTION_ENTRIES = ['reactionSink', 'reactionSource', 'saturatingSink',
     'saturatingSource', 'firstOrderSink', 'secondOrderSink'];
 
@@ -63,11 +60,8 @@ function checkReactionLines() {
             check(`${preset.id}: every term of reaction ${reaction.name} multiplies the same species`,
                 reaction.factorsAgree);
             check(`${preset.id}: reaction ${reaction.name} has a left-hand side`, reaction.left.length > 0);
-            // The arrow carries the EVENT rate, the reference term's rate over
-            // its own stoichiometric change. Where that change is one the two
-            // are the same symbol; where it is not (2A -> enters A's balance at
-            // twice the event rate) the arrow must not repeat the term's symbol,
-            // which is what the read-back above cannot see, since it is numeric.
+            // Where the stoichiometric change is not one (2A ->), the arrow must
+            // not repeat the term's symbol, which the numeric read-back cannot see.
             if (!rateIsArrhenius(reaction.rate)) {
                 const arrow = panelReactionRate(reaction);
                 const term = panelCoefficientSymbol(reaction.rate, 'rate', reaction.field, reaction.name);

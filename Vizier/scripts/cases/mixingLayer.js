@@ -12,11 +12,9 @@ caseRegister(() => ({
         + 'zero viscosity requested, and the shear rolls up into vortices. The '
         + 'mesh still smears the flow at the scale of a cell, and the panel '
         + 'shows how much viscosity that amounts to.',
-    // 512 cells, so the layer starts thin enough to roll up inside the box,
-    // and a coarsest level of 32: at 64 the impulsive start rings between
-    // inlet and outlet for seconds.
-    // With no viscosity every advection term is pure upwind and sits in the
-    // denominator, so nothing explicit limits the step.
+    // 512 cells, so the layer starts thin enough to roll up inside the box; a
+    // coarsest level of 32, since at 64 the impulsive start rings for seconds.
+    // Pure upwind is all diagonal, so nothing explicit limits the step.
     solver: {
         cells: 512, coarsestCells: 32,
         timeStep: 1 / 120, stepsPerFrame: 2, cyclesPerFrame: 2,

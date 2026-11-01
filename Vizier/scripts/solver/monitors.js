@@ -2,18 +2,15 @@
 // What the page watches while a case runs: each field's largest magnitude, the
 // peak speed, the heat flux through two walls, and the divergence field.
 //
-// Each is a kernel writing into the controls buffer (or a field array), and
-// MonitorsReader brings the controls buffer back to the host once a second.
-// Nothing in the solve reads any of them.
+// MonitorsReader brings the controls buffer back once a second. Nothing in the
+// solve reads any of them.
 
 'use strict';
 
 // Field health
-//
-// The largest magnitude each solved field holds, for the divergence watchdog,
-// taken on the bits with the sign masked. A compiler may assume no float is
-// NaN and fold a floating-point test for one away; a NaN's bits still beat
-// every finite value's.
+
+// Taken on the bits with the sign masked: a compiler may fold a float NaN test
+// away, but a NaN's bits still beat every finite value's.
 
 function makeHealthScanCode(system, equation, arrays) {
     const location = equation.location;
@@ -40,9 +37,9 @@ function makeHealthResetCode(system) {
 }
 
 // The largest speed
-//
-// WGSL has no atomic maximum over floats, so the scan takes atomicMax over the
-// bits of the speed. Non-negative floats order the same way as their bits.
+
+// WGSL has no atomic maximum over floats; non-negative floats order the same
+// way as their bits.
 
 // The emitter and the frame loop in runtime.js both ask this, so a system that
 // generates no scan never dispatches one.
@@ -73,11 +70,9 @@ ${interiorEntryPoint('scanVelocityMax', 0, `let p = indexCenter(level, column, r
 }
 
 // The heat flux through two walls
-//
-// For the Nusselt number: the mean temperature difference across each wall's
-// face, over the spacing, along the whole edge. The ghost holds the mirror of
-// the wall value, so ghost minus inside is the gradient one face wide. One
-// thread walks both edges; an edge is at most a thousand cells.
+
+// The ghost holds the mirror of the wall value, so ghost minus inside is the
+// gradient one face wide. One thread walks both edges, at most 1024 cells each.
 
 // The emitter and the frame loop both ask this.
 function monitorsMeasureWallHeatFlux(system) {
@@ -125,9 +120,8 @@ function makeWallHeatFluxCode(walls) {
 }
 
 // The divergence
-//
-// Shown and never solved for, so it is recomputed on the finest level once a
-// frame, from the state the frame ended on.
+
+// Shown and never solved for: recomputed on the finest level once a frame.
 function makeDivergenceCode() {
     return interiorEntryPoint('computeDivergence', 0, `let p = indexCenter(level, column, row);
             if (grid.typeCenter[p] != FLUID) { centerState.divergence[p] = 0.0; return; }
@@ -135,10 +129,8 @@ function makeDivergenceCode() {
 }
 
 // The readback
-//
-// Reads the controls buffer through a staging copy, off the frame path. The
-// page says how many heat-flux samples to keep and where a failed read is
-// reported.
+
+// Through a staging copy, off the frame path.
 class MonitorsReader {
     constructor(device, buffer, plate, heatFluxWindow, onError) {
         this.device = device;

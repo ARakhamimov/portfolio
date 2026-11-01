@@ -12,9 +12,9 @@ caseRegister(() => ({
         + 'while a feed replaces A, so the fronts curl into spirals that keep '
         + 'turning. Use the species buttons to watch B alone.',
     system: { physics: 'reactionDiffusion', speciesBOrder: 2 },
-    // A quarter of the usual step, four times a frame, so the clock runs at the
-    // usual rate and the autocatalytic source, kept in the numerator, gets a
-    // step it can hold.
+    // A quarter of the usual step, four times a frame: the clock runs at the
+    // usual rate, and the autocatalytic source, kept out of the diagonal, gets
+    // a step it can hold.
     solver: { timeStep: 1 / 240, stepsPerFrame: 4 },
     geometry: { edges: { left: WALL, right: WALL, top: WALL, bottom: WALL } },
     inlet: { speed: 0 },
@@ -31,10 +31,9 @@ caseRegister(() => ({
             { field: 'speciesB', value: 0.25, at: profileDiskWeight(0.58, 0.46, 0.02).at },
         ],
     },
-    // Gray and Scott's constants with every rate and both diffusivities scaled
-    // by 200, an exact change of clock, so reactionRate is that factor. F 0.018
-    // and k 0.051 is the spiral region of Pearson's (1993) parameter plane, and
-    // a feature is about a twentieth of the box.
+    // Gray and Scott's constants with every rate and diffusivity scaled by 200,
+    // a change of clock, so reactionRate is that factor. F 0.018 and k 0.051 is
+    // the spiral region of Pearson's (1993) parameter plane.
     coefficients: {
         reactionRate: 200,
         feedRate: 3.6,                          // F = 0.018

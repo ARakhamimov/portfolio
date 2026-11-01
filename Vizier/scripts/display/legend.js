@@ -3,10 +3,9 @@
 // key and the notes for the overlays drawn over it. What each view's legend
 // says is its record in views.js.
 //
-// A legend cannot be produced by the shader that draws the canvas, so this is
-// the one place a rule is written twice. Both sides read their numbers and
-// colors from displaySettings; the formulas are what is kept in step with
-// draw.js by hand. Nothing in the solver depends on this file.
+// The one place a rule is written twice: both sides read displaySettings, but
+// the color formulas are kept in step with draw.js by hand. Nothing in the
+// solver depends on this file.
 
 'use strict';
 
@@ -103,8 +102,8 @@ function legendHatchKey(plate, entry) {
         .join('');
     const unstriped = entry.unstriped || 'Unstriped is at or under the floor of the scale.';
     return `<div class="legendHatch"><ul class="legendKeys">${keys}</ul>`
-        + '<p class="legendNote">Hatching lightens and darkens the color symmetrically, so the hue '
-        + 'and the mean brightness stay. Its direction says what the color means here, a second way '
+        + '<p class="legendNote">Hatching swings the color as far toward white as toward black, so '
+        + 'the hue stays and the stripes show on light and dark colors alike. Its direction says what the color means here, a second way '
         + 'to read it if you cannot separate the hues. The period is '
         + `${plate.hatchPitch[0].toFixed(0)} screen pixels. ${unstriped} ${toggle}</p></div>`;
 }

@@ -11,16 +11,9 @@ verifyCheck('verify_page.js', function (process) {
 let failures = 0;
 const fail = (message) => { console.log(`  FAIL  ${message}`); failures++; };
 
-// The page's panel, legends and button states are host code that no other check
-// runs, and a name missing from a function's scope throws only when the page
-// refreshes. So the page's refresh (controlsRefresh, then the two panels) runs
-// here for every preset and every view it offers, with the arrows, streamlines
-// and hatching off and on, against a stub document that accepts any element
-// and property. The sandbox's Build card and
-// overlay are drawn the same way, for every tool, with build mode off and on
-// and a shape half drawn, and its keys are pressed in turn. Only that nothing
-// throws is checked: what the panel says is verify_equations, and what the
-// editor does is verify_sandbox, through the functions the editor calls.
+// A name missing from a page function's scope throws only on a refresh, so the
+// refresh and the Build card run here against a stub document, for every
+// preset, view, overlay and tool. Only that nothing throws is checked.
 console.log('');
 console.log('THE PANEL REFRESHES FOR EVERY CASE AND VIEW');
 {

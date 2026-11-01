@@ -1,12 +1,10 @@
 // grid.js, by Allen Rakhamimov.
 // Staggered storage in both languages: where every point of every level lives.
 //
-// The Plate holds the array shapes, the per-level offsets, the boundary
-// classification and the buffers the GPU reads. The last division prints the
-// WGSL structs and index functions from the same tables, so the shader and the
-// host cannot disagree about where a point is. A first read needs the
-// locations, the point offsets and the Plate's index helpers, and can skip
-// everything from the GPU buffers on.
+// The Plate holds the array shapes, offsets, classification and GPU buffers;
+// the last division prints the WGSL structs and index functions from the same
+// tables, so shader and host cannot disagree about where a point is. A first
+// read can skip everything from the GPU buffers on.
 
 'use strict';
 
@@ -58,11 +56,9 @@ function countOf(location, interior) {
     return widthOf(location, interior) * heightOf(location, interior);
 }
 
-// Where each kind of point sits: the point with index k along an axis is at
-// (k + offset) * spacing, the interior being the unit square. A face with
-// index k is the minus face of cell k. A corner is where vorticity is
-// evaluated, never a place an array is stored. Every position in both
-// languages is read from this table.
+// Index k sits at (k + offset) * spacing, the interior the unit square; face k
+// is the minus face of cell k. A corner is where vorticity is evaluated, never
+// stored. Every position in both languages is read from this table.
 const GRID_POINT_OFFSETS = {
     center: { x: -0.5, y: -0.5 },
     xFace:  { x: -1.0, y: -0.5 },
@@ -129,14 +125,10 @@ function bufferGroupFor(location, role) {
 }
 
 // The controls buffer
-//
-// One row per member, in buffer order: its WGSL type, how many it holds (one,
-// one per level, one per solved field, or a fixed count), the value a new
-// plate starts with (zero unless given), and whether a rebuild for another
-// case or resolution keeps the viewer's value. The Plate's arrays, the
-// Controls struct and the page's carry-over across a rebuild all read it.
-// Display switches live here, so toggling one between two pictures is a
-// buffer write and not a rebuild.
+
+// One row per member, in buffer order: its WGSL type, its count, its starting
+// value and whether a rebuild keeps the viewer's value. Display switches live
+// here, so toggling one is a buffer write and not a rebuild.
 const CONTROLS_MEMBERS = [
     // The level a kernel runs at, set by a one-thread kernel (setLevel), and
     // what the picture shows. The page keeps the view across a rebuild itself,
@@ -158,11 +150,9 @@ const CONTROLS_MEMBERS = [
     // canvas pixels it would shrink as the layout narrows until the browser's
     // downscaling filtered the hatch away.
     { name: 'hatchScale',      type: 'f32', start: 1, kept: true },
-    // The hatch's period in screen pixels, and how far it swings toward white
-    // and toward black. The swing is symmetric, so the mean color is the plain
-    // one and the accessible view is not a dimmer view. Viewers' controls, as
-    // are the arrow spacing and the contour count, since what is legible
-    // depends on the viewer and the display.
+    // The hatch's period in screen pixels and its swing toward white and black.
+    // The swing is symmetric, so stripes show on light and dark colors alike.
+    // Kept across rebuilds, since what is legible depends on the viewer.
     { name: 'hatchPitch',      type: 'f32', start: 14, kept: true },
     { name: 'hatchDepth',      type: 'f32', start: 0.45, kept: true },
     { name: 'arrowPitch',      type: 'f32', start: 34, kept: true },
@@ -200,12 +190,9 @@ function gridControlsType(member, levels) {
 
 class Plate {
 
-    // finestLevelIndex indexes MESH_SIZES (0 is 1024). coarsestInterior stops the
-    // hierarchy early: a case stops where its solver group says (32 unless it
-    // declares otherwise), and the default 16 serves checks on small meshes.
-    // `fields` names the fields the page allocates for a running system
-    // (simulationFields in fields.js); a check leaves it out and gets arrays
-    // for every field.
+    // finestLevelIndex indexes MESH_SIZES (0 is 1024). A case stops the hierarchy
+    // where its solver group says; the default 16 serves checks on small meshes.
+    // `fields` is simulationFields' list; a check leaves it out to get them all.
     constructor(finestLevelIndex = DEFAULT_MESH_INDEX, coarsestInterior = MESH_SIZES[MESH_SIZES.length - 1],
         fields = undefined) {
         this.fields = fields;

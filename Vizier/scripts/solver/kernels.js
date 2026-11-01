@@ -7,9 +7,7 @@
 
 'use strict';
 
-// How every kernel opens
-//
-// The level it runs at, the point it works on, and one named test of whether
+// How every kernel opens: its level, its point, and one named test of whether
 // that point is its to work on.
 
 // Over the interior points of a location: one invocation per interior point,
@@ -31,7 +29,7 @@ function interiorEntryPoint(name, location, body) {
 // extent instead, the last rows and columns would keep what they held: no
 // error, only a band.
 function marginKernels() {
-    return ['fill', 'shiftHistory', 'scanHealth'];
+    return ['fill', 'shiftHistory', 'scanHealth', 'snapshot', 'change'];
 }
 
 function marginEntryPoint(name, location, body) {
@@ -70,9 +68,8 @@ function makeKernelCode(system, arrayNamesFor, workgroup, levelCount) {
         entryPoints.push(marginEntryPoint(`fill_${field}`, location,
             `fillBoundary_${field}(level, column, row);`));
 
-        // relaxAll_ and not relax_, which the dictionary already defines. The
-        // constraint row is swept in one color because it does not read its own
-        // unknown at any neighbor, so two colors would compute the same thing.
+        // One color: the constraint row reads its unknown at no neighbor, so
+        // two would compute the same thing. relaxAll_, since relax_ is taken.
         if (equation.constraint) {
             entryPoints.push(interiorEntryPoint(`relaxAll_${field}`, location, relaxCall(equation)));
         } else {
@@ -87,7 +84,7 @@ function makeKernelCode(system, arrayNamesFor, workgroup, levelCount) {
         entryPoints.push(interiorEntryPoint(`residualInto_${field}`, location,
             `${arrays.residual}[${indexFunction}(level, column, row)] = residual_${field}(level, column, row);`));
 
-        // No kernel stores N(u): buildCoarseRightHandSide_ uses it in the same pass.
+        // No kernel stores N(u): the coarse right-hand side uses it in one pass.
 
         // Restriction and prolongation are both launched over the coarse level,
         // which bounds the work in either direction.
@@ -113,7 +110,7 @@ function makeKernelCode(system, arrayNamesFor, workgroup, levelCount) {
 
         entryPoints.push(interiorEntryPoint(`coarseRightHandSide_${field}`, location,
             `buildCoarseRightHandSide_${field}(level, column, row);`));
-        entryPoints.push(interiorEntryPoint(`change_${field}`, location,
+        entryPoints.push(marginEntryPoint(`change_${field}`, location,
             `computeChange_${field}(level, column, row);`));
 
         // Ghosts included, so the old level keeps the boundary that was used.
@@ -122,9 +119,9 @@ function makeKernelCode(system, arrayNamesFor, workgroup, levelCount) {
                 `let p = ${indexFunction}(level, column, row);\n            ${arrays.history}[p] = ${arrays.value}[p];`));
         }
 
-        // Taken after the coarse fill, so the change is exactly zero wherever
-        // the boundary is prescribed.
-        entryPoints.push(interiorEntryPoint(`snapshot_${field}`, location,
+        // After the coarse fill and over the ghost ring, so the change follows the
+        // boundary rule at the ghosts prolongation reads.
+        entryPoints.push(marginEntryPoint(`snapshot_${field}`, location,
             `let p = ${indexFunction}(level, column, row);\n            ${arrays.restricted}[p] = ${arrays.value}[p];`));
 
         entryPoints.push(makeHealthScanCode(system, equation, arrays));
@@ -135,10 +132,9 @@ function makeKernelCode(system, arrayNamesFor, workgroup, levelCount) {
     if (monitorsMeasureSpeed(system)) entryPoints.push(makeSpeedScanCode());
     if (monitorsMeasureWallHeatFlux(system)) entryPoints.push(makeWallHeatFluxCode(system.heatFluxWalls));
 
-    // One kernel per level, run between dispatches to set the level. The host
-    // cannot write it mid-pass: queue.writeBuffer is ordered against submitted
-    // work and not against an encoder still being built, so every dispatch
-    // would see the last level written.
+    // One kernel per level sets the level between dispatches: queue.writeBuffer
+    // is ordered against submitted work, not an encoder still being built, so
+    // every dispatch would see the last level written.
     for (let level = 0; level < levelCount; level++) {
         // language=WGSL
         entryPoints.push(`

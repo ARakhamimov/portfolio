@@ -2,10 +2,8 @@
 // The profiles, weights, layers and seeds a case file writes its declaration
 // with.
 //
-// Machinery: nothing here runs on its own. A profile is a value as a function
-// of position, written once as a WGSL expression in position.x and position.y
-// (positionProfile, coefficients.js); y runs down the screen. Each number goes
-// in through wgslNumber.
+// Machinery: nothing here runs on its own. A profile is a WGSL expression in
+// position.x and position.y (positionProfile); y runs down the screen.
 
 'use strict';
 
@@ -57,7 +55,7 @@ function profileRectangleWeight(x0, y0, x1, y1) {
 
 // A shape for a coefficient: one everywhere except `factor` inside a
 // rectangle. At least one, since the slot holds the coefficient's least value;
-// a patch is kept two coarse cells across, as a carved passage is.
+// keep a patch two coarse cells across, as a carved passage is.
 function profilePatchFactor(factor, rect) {
     return positionProfile(`select(1.0, ${wgslNumber(factor)}, ${profileInRectangle(rect)})`);
 }
@@ -85,9 +83,9 @@ function profileInRectangle([x0, y0, x1, y1]) {
         + `&& position.y >= ${wgslNumber(y0)} && position.y <= ${wgslNumber(y1)}`;
 }
 
-// A rectangle as a mask for an initial patch: only the at() half, since
-// seeding happens once on the host.
-function profileInRect(x0, y0, x1, y1) {
+// A rectangle as the host-side `at` test of a seed entry, which is seeded once
+// on the host and needs no WGSL.
+function profileRectangleAt(x0, y0, x1, y1) {
     return (x, y) => x >= x0 && x <= x1 && y >= y0 && y <= y1;
 }
 
@@ -102,8 +100,8 @@ function profileOregonatorSeed(rest, width) {
         { field: 'speciesB', value: rest.Y },
         { field: 'speciesC', value: rest.Z },
         { field: 'speciesC', value: rest.peak,
-          at: profileInRect(front - excited - refractory, 0, front - excited, 0.5) },
-        { field: 'speciesA', value: 0.3, at: profileInRect(front - excited, 0, front, 0.5) },
-        { field: 'speciesB', value: 0, at: profileInRect(front - excited, 0, front, 0.5) },
+          at: profileRectangleAt(front - excited - refractory, 0, front - excited, 0.5) },
+        { field: 'speciesA', value: 0.3, at: profileRectangleAt(front - excited, 0, front, 0.5) },
+        { field: 'speciesB', value: 0, at: profileRectangleAt(front - excited, 0, front, 0.5) },
     ];
 }

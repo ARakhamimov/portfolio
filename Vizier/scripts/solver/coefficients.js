@@ -10,21 +10,14 @@
 'use strict';
 
 // The declared constants and the slots
-//
-// A case declares physical constants (its coefficients group, and the two
-// boundary temperatures in their own groups). A slot holds what a term reads
-// directly, in the Coefficients buffer, so moving a slider is a buffer write
-// and not a rebuild; a slot built from two constants is built on the host.
-// Both tables are read by everything that needs them: the case defaults, the
-// slider bar, which slots a slider feeds, the Coefficients struct, the values
-// written into it, and the symbols the panel sets.
 
-// Every constant a case may declare, with the value it takes when the case is
-// silent. One a viewer may move has a slider label, in the order the bar shows
-// them; it moves in equal ratios, or linearly where it says so. A LITERAL is
-// written into the shader unless the case gives it a slider, and then read
-// from the slot of its own name. A PATH says where a constant lives outside the
-// coefficients group.
+// A case declares constants; a term reads a slot in the Coefficients buffer,
+// so moving a slider is a buffer write and not a rebuild. A slot built from
+// two constants is built on the host.
+
+// Every constant a case may declare, with its default. A slider moves in equal
+// ratios unless it says linearly. A LITERAL is written into the shader unless
+// the case gives it a slider; a PATH says where it lives outside the group.
 const COEFFICIENT_CONSTANTS = [
     { name: 'viscosity',            default: undefined, slider: 'viscosity' },     // every case states its own
     { name: 'permeability',         default: undefined, slider: 'permeability' },  // of a porous bed
@@ -83,10 +76,9 @@ function coefficientOwnSlot(name, symbol) {
     return { slot: name, from: [name], value: (c) => c[name] || 0, symbol };
 }
 
-// Every slot, in the Coefficients struct's order: the constants it is built
-// from, how, and the symbol the panel writes it as. A slot holding a host
-// quotient is written as the quotient and bracketed, since it is about to
-// stand beside a field and (F + k_rem) C_B is not F + k_rem C_B.
+// Every slot in struct order, with its constants, how it is built and its
+// symbol. A host quotient's symbol is bracketed, since (F + k_rem) C_B is not
+// F + k_rem C_B.
 const COEFFICIENT_SLOT_TABLE = [
     { slot: 'viscosity', from: ['viscosity'], value: (c) => c.viscosity, symbol: 'ν' },
     { slot: 'massDiffusivity', from: ['massDiffusivity'], value: (c) => c.massDiffusivity, symbol: 'D' },
@@ -107,10 +99,8 @@ const COEFFICIENT_SLOT_TABLE = [
     // Darcy's drag, the viscosity over the permeability.
     { slot: 'drag', from: ['viscosity', 'permeability'], symbol: '(ν/κ)',
         value: (c) => (c.permeability > 0 ? c.viscosity / c.permeability : 0) },
-    // These three are multiplied by the strength a region was painted with. In
-    // an equation a painted coefficient is written by its bare symbol with
-    // (x, y), as k(x, y), or by these where the bare value is zero, as the drag
-    // is; the slider rows and the panel's notes name these.
+    // Multiplied by the strength a region was painted with. An equation writes
+    // a painted coefficient as k(x, y), or by these where its bare value is zero.
     coefficientOwnSlot('paintedReactionRate', 'k_cat'),
     { slot: 'paintedUptakeRate', from: ['paintedReactionRate', 'yieldCoefficient'], symbol: '(μ_cat/Y)',
         value: (c) => ((c.yieldCoefficient || 0) > 0 ? (c.paintedReactionRate || 0) / c.yieldCoefficient : 0) },
@@ -126,11 +116,9 @@ const COEFFICIENT_SLOT_TABLE = [
     coefficientOwnSlot('recoveryRate', 'k_e'),
     { slot: 'bromideReturnRate', from: ['stoichiometricFactor', 'recoveryRate'], symbol: '(f k_e/2)',
         value: (c) => 0.5 * (c.stoichiometricFactor || 0) * (c.recoveryRate || 0) },
-    // Values of the temperature field, not constants, and slots only in a case
-    // that gives them (or the diffusivity) a slider. A temperature a slider
-    // moves is written as a symbol, although a setpoint the case fixes is
-    // written as its number. Only the heater's appears in an equation; the
-    // other two are boundary values and have symbols so that no slot lacks one.
+    // Temperatures, slots only where a slider moves them; a fixed setpoint is
+    // written as its number. Only the heater's appears in an equation; the other
+    // two are boundary values and have symbols so that no slot lacks one.
     { slot: 'wallTemperature', from: ['wallTemperature'], symbol: 'T_wall',
         value: (c) => (Number.isFinite(c.wallTemperature) ? c.wallTemperature : 0) },
     { slot: 'inletTemperature', from: ['inletTemperature'], symbol: 'T_feed',
@@ -149,8 +137,8 @@ const COEFFICIENT_SLOT_TABLE = [
     coefficientOwnSlot('appliedElectricField', 'E_0'),
 ];
 
-// The slots by name, the ports' five each last (boundaryPortSlotList).
-const COEFFICIENT_SLOTS = [...COEFFICIENT_SLOT_TABLE.map((row) => row.slot), ...boundaryPortSlotList()];
+// The slots by name, the ports' five each last (BOUNDARY_PORT_SLOTS).
+const COEFFICIENT_SLOTS = [...COEFFICIENT_SLOT_TABLE.map((row) => row.slot), ...BOUNDARY_PORT_SLOTS];
 
 // Every slot's value from a case's constants, ports aside, which the case
 // fills from its port list.
@@ -184,10 +172,9 @@ function coefficientIsSlot(param) {
 
 // Coefficients that vary in space
 
-// A PROFILE: a slot or a number times a shape, given as an (at, wgsl) pair in
-// position. The shape is at least one, so the slot holds the coefficient's
-// smallest value. It is evaluated at each level's own points and never
-// restricted, and a coefficient inside a flux reads it per face.
+// A PROFILE: a slot or a number times a shape of at least one, so the slot
+// holds the smallest value. Evaluated at each level's own points, never
+// restricted, and per face inside a flux.
 
 // The shape is checked on a grid this fine; a feature narrower than one sample
 // is already narrower than any coarsest level can carry.
@@ -235,10 +222,9 @@ function coefficientIsProfile(param) {
 
 // Coefficients a viewer paints
 
-// A PAINTED coefficient reads an array in the grid buffer, at one location and
-// only at a row's own point there: zero means the bare value, anything else the
-// painted value times that strength. Each array is painted at its own points
-// on every level (paintMaterials in geometry.js), so nothing is averaged or restricted.
+// A PAINTED coefficient reads an array at a row's own point: zero means the
+// bare value, anything else the painted value times that strength. Painted on
+// every level (paintMaterials), so nothing is averaged or restricted.
 const PAINT_ARRAY_LOCATIONS = {
     paintCatalystCenter: CENTER,
     paintPorousXFace: XFACE,
@@ -301,10 +287,8 @@ function coefficientValueOf(plate, param, position) {
     return plate.coefficientValue(param.coefficientSlot);
 }
 
-// The same coefficient as WGSL. A profile's shape is printed inline in the
-// `position` every stencil has in scope.
-// A painted array is read at `index`, the point's flat index as the caller
-// names it.
+// The same coefficient as WGSL. A profile is printed inline in the `position`
+// every stencil has in scope; a painted array is read at `index`.
 function coefficientCodeOf(param, index = 'p') {
     if (coefficientIsPainted(param)) {
         const { array, bare, painted } = param.coefficientPainted;
@@ -320,11 +304,9 @@ function coefficientCodeOf(param, index = 'p') {
     return `coefficients.${param.coefficientSlot}`;
 }
 
-// A PROFILE: a value given as a function of position, written once as a WGSL
-// expression in position.x and position.y. The host evaluates the same text,
-// since WGSL's arithmetic, comparisons and && read the same in JavaScript; only
-// select(otherwise, then, condition) and the few builtins a profile uses are
-// defined for it.
+// A value as a WGSL expression in position.x and position.y. The host runs the
+// same text, since WGSL's arithmetic and comparisons read the same in
+// JavaScript; only select() and a few builtins are defined for it.
 function positionProfile(wgsl) {
     const evaluate = new Function('position', 'select', 'sqrt', 'abs', 'min', 'max', 'exp',
         `return (${wgsl});`);

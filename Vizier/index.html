@@ -34,11 +34,9 @@
     <div id="message" class="empty" role="status" aria-live="polite"></div>
 
     <div class="controlbar">
-        <!-- A button that does something is sentence case (Pause, Accessible
-             hatching); one that names a thing to show carries that thing's own
-             lowercase name, from VIEW_NAMES or FIELD_SPEC. The resolution
-             costs a rebuild, so it is the one select in a bar of buttons; the
-             level shown is free to move through, so it is a row. -->
+        <!-- A button that acts is sentence case; one that names a thing to show
+             carries its lowercase name. The resolution costs a rebuild, so it
+             is the one select in a bar of buttons. -->
         <span class="caption" id="runCaption">Run</span>
         <div class="segmented" role="group" aria-labelledby="runCaption">
             <button id="pause" type="button" aria-pressed="false">Pause</button>
@@ -67,8 +65,8 @@
         <span class="caption" id="viewCaption">Show</span>
         <div class="segmented" id="viewModes" role="group" aria-labelledby="viewCaption"></div>
         <p class="caution" role="note"><strong>Warning: flashing images.</strong> Pressure,
-           divergence and residual redraw on a scale that follows the solver, so they flicker
-           while a case starts and shimmer once it settles. Pause the run before switching to
+           divergence and residual change from frame to frame as the solver works, so they
+           flicker while a case starts and shimmer once it settles. Pause the run before switching to
            them if you are sensitive to flashing.</p>
 
         <span class="caption" id="speciesCaption">Species shown</span>
@@ -146,6 +144,7 @@
 
     <section class="card">
         <h2>Equations solved</h2>
+        <p class="note" id="equationsNote">The case's continuous equations, before discretization.</p>
         <div id="equations" class="equations"></div>
     </section>
 

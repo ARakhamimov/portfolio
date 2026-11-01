@@ -3,9 +3,8 @@
 // that keeps the bar and the legend in step with the running case.
 //
 // Every control goes through controlsActions, so a key and its button call one
-// function. What a control does to the rest of the page arrives as a handler
-// from page.js (changed, exportRun, buildKey), so this file calls into no
-// panel. Nothing in the solver depends on it.
+// function; what a control does to the rest of the page arrives as a handler
+// from page.js. Nothing in the solver depends on this file.
 
 'use strict';
 
@@ -21,10 +20,9 @@ function controlsFieldLabel(name, physics = appActivePreset().system.physics) {
 
 // The keyboard
 
-// Each key, what the key table says it does, and the action it takes. All on
-// the left of the keyboard, so the map is reachable one-handed; the cycle
-// budget is the exception, a developer control. Build mode's own keys are
-// editor.js's EDITOR_KEYS and are read before these.
+// Each key, what the key table says it does, and its action. All under the left
+// hand but the cycle budget, a developer control. Build mode's EDITOR_KEYS are
+// read before these.
 const CONTROL_KEYS = [
     { label: 'space', what: 'pause', press: { ' ': (act) => act.togglePause() } },
     { label: '1 / 2', what: 'cells shown, finer and coarser',
@@ -57,9 +55,8 @@ function controlsKeyTable() {
 // The coefficient sliders
 
 // The sliders this case shows, as [name, label, shape, range], in the bar's
-// order. Every slider a case may list is a constant with a slider label
-// (COEFFICIENT_SLIDERS): a viewer's names and not the shader's slots, so the
-// yield reaches the shader only inside Monod's uptake slot.
+// order. They are constants (COEFFICIENT_SLIDERS), a viewer's names and not
+// the shader's slots.
 function controlsOfferedSliders(preset) {
     const known = COEFFICIENT_SLIDERS.map(({ name }) => name);
     for (const name of Object.keys(preset.sliders)) {
@@ -136,7 +133,7 @@ function controlsActions(device, currentScene, options, handlers) {
 
         setViewMode(mode) { set('viewMode', mode); },
 
-        // Through the views this case offers, so a key cannot reach one the bar hides.
+        // Through the offered views, so a key cannot reach one the bar hides.
         stepViewMode(forward) {
             const { plate, system } = currentScene();
             const offered = viewsOffered(system).map((name) => views.indexOf(name));
@@ -355,11 +352,9 @@ function controlsInstall(device, currentScene, options, handlers) {
 }
 
 // The rows that follow the case
-//
-// The view row, the species row, the material row and the field row offer
-// what the running system can show, from the same lists in views.js and
-// draw.js that the shader is generated from. Each is rebuilt only when its
-// list changes, so a button is never replaced under a viewer's pointer.
+
+// Each row comes from the lists the shader is generated from, and is rebuilt
+// only when its list changes, so a button is never replaced under the pointer.
 
 const controlsRowBuilders = { views: null, species: null, materials: null, fields: null };
 let controlsViewNames = [];

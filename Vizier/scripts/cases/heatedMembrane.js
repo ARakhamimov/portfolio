@@ -8,8 +8,8 @@ caseRegister(() => ({
     id: 'heatedMembrane',
     label: 'Heated membrane',
     view: 'species',
-    note: 'A membrane with a hot spot near its feed face, where diffusion is '
-        + 'a hundred times faster. The front runs far ahead through the spot '
+    note: 'A membrane with a hot spot near its feed face, where diffusion runs '
+        + 'up to about sixty times faster. The front runs far ahead through the spot '
         + 'and stays bent around it at steady state.',
     system: { physics: 'permeation' },
     solver: { cells: 128, timeStep: 0.05, stepsPerFrame: 2 },
@@ -18,6 +18,7 @@ caseRegister(() => ({
     wall: { temperature: 20, species: { speciesA: 0 } },
     // D(T) = D0 exp(s (T - T0)), the linearized Arrhenius form a rate takes,
     // with s chosen so that D is a hundred times higher at the heater's target.
+    // The loss holds the spot below about 91 degrees, so it reaches about sixty.
     coefficients: {
         viscosity: 0,
         thermalDiffusivity: 0.05,

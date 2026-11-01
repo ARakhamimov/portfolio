@@ -1,6 +1,6 @@
 // dielectricDipole.js, by Allen Rakhamimov.
-// A dipole beside a dielectric slab ten times as polarizable as the space
-// around it.
+// A dipole beside a dielectric slab with ten times the permittivity of the
+// space around it.
 
 'use strict';
 
@@ -14,8 +14,8 @@ caseRegister(() => {
         id: 'dielectricDipole',
         label: 'Dipole beside a dielectric',
         view: 'potential',
-        note: 'The dipole beside a slab ten times more polarizable than its '
-            + 'surroundings. The slab draws the field in, and the potential '
+        note: 'The dipole beside a slab with ten times the permittivity of '
+            + 'its surroundings. The slab draws the field in, and the potential '
             + 'flattens across it.',
         system: { physics: 'electrostatics' },
         // A coarsest level of 16, not 32: at 32 the grounded box's lowest mode

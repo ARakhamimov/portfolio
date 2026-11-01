@@ -2,10 +2,9 @@
 // The boundary table, keyed on (type, role, field), and the WGSL that fills the
 // ghost points from it.
 //
-// A wall holds velocity at zero and temperature at zero gradient, so the kind of
-// condition and its value come from the table, per field. A face normal to the
-// boundary lies on it and is written directly; every other ghost lies half a
-// cell outside and takes the mirror that puts the boundary value at the average.
+// A face normal to the boundary lies on it and is written directly; every
+// other ghost lies half a cell outside and takes the mirror that puts the
+// boundary value at the average.
 
 'use strict';
 
@@ -86,24 +85,18 @@ function relaxedSurfaceMask(table, role, fieldName) {
 
 // Ports and the perimeter
 
-// How many ports a case may declare (the offset jets use four), and the five
-// slots each one owns. Functions and not consts, because the slot list above
-// is built from them while this file is still being read.
-function boundaryPortCount() { return 6; }
+// How many ports a case may declare (the sandbox's limit), and the five slots
+// each one owns.
+const BOUNDARY_PORT_COUNT = 6;
 
-function boundaryPortSlotList() {
-    const names = [];
-    for (let k = 0; k < boundaryPortCount(); k++) {
-        for (const quantity of ['Start', 'End', 'Speed', 'FeedA', 'FeedB']) names.push(`port${quantity}${k}`);
-    }
-    return names;
+const BOUNDARY_PORT_SLOTS = [];
+for (let k = 0; k < BOUNDARY_PORT_COUNT; k++) {
+    for (const quantity of ['Start', 'End', 'Speed', 'FeedA', 'FeedB']) BOUNDARY_PORT_SLOTS.push(`port${quantity}${k}`);
 }
 
-// Where a point on the ghost ring lies along the perimeter, as one number: the
-// left edge runs 0 to 1 top to bottom, the top 1 to 2 left to right, the right
-// 2 to 3 top to bottom and the bottom 3 to 4 left to right, so a port is two
-// slots. Each piece is a test and the value where it first holds, printed into
-// both languages.
+// A ghost point's place along the perimeter as one number: left 0 to 1 top to
+// bottom, top 1 to 2, right 2 to 3 top to bottom, bottom 3 to 4, so a port's
+// stretch is two numbers. Printed into both languages from the one list.
 const BOUNDARY_PERIMETER_PIECES = [
     { when: 'x <= 0.0', value: 'y' },
     { when: 'x >= 1.0', value: '2.0 + y' },
@@ -129,8 +122,8 @@ function boundaryPerimeterCode() {
 const BOUNDARY_PORT_INWARD = [[1, 0], [0, 1], [-1, 0], [0, -1]];
 function boundaryPortInward(edge) { return BOUNDARY_PORT_INWARD[edge].slice(); }
 
-// Each port is five slots (boundaryPortSlotList), so moving one is a buffer write.
-// Its velocity points into the domain from its edge.
+// Each port is five slots (BOUNDARY_PORT_SLOTS), so moving one is a buffer
+// write.
 const BOUNDARY_PORT_VALUES = ['xVelocity', 'yVelocity', 'speciesA', 'speciesB'];
 
 function boundaryPortValue(quantity) {
@@ -146,8 +139,7 @@ function boundaryIsPortValue(value) {
 }
 
 // portValue_<quantity>: the value the first port holding this point feeds, and
-// zero where none does. Along the perimeter the left edge runs 0 to 1, the top
-// 1 to 2, the right 2 to 3 and the bottom 3 to 4 (boundaryPerimeterOf).
+// zero where none does.
 function makePortValueCode(quantity) {
     const location = fieldSpecOf(quantity).location;
     const position = positionFunctionAt(location);
@@ -172,7 +164,7 @@ function makePortValueCode(quantity) {
     }
 
     let ports = '';
-    for (let k = 0; k < boundaryPortCount(); k++) {
+    for (let k = 0; k < BOUNDARY_PORT_COUNT; k++) {
         const value = axis !== undefined ? `coefficients.portSpeed${k} * inward`
             : `coefficients.port${quantity === 'speciesA' ? 'FeedA' : 'FeedB'}${k}`;
         // language=WGSL
@@ -247,14 +239,9 @@ function makeOwnershipCode(fieldName, location, role, table) {
     `;
 }
 
-// fillBoundary_<field>, for one boundary point:
-//   - a fluid point is left alone, and a type the table has no entry for gets 0;
-//   - a face that lies on a surface takes the surface rule: a Dirichlet value
-//     written in, a relaxed face left to the smoother, or else the value of the
-//     next face into the fluid;
-//   - every other point is a ghost half a cell outside and takes the mirror:
-//     the average of the neighbors the smoother owns, reflected through a
-//     Dirichlet value (2 value - average) or copied as it is.
+// fillBoundary_<field>: a surface face takes its surface rule (a Dirichlet
+// value, left to the smoother, or the next face's value); other ghosts mirror
+// their solved neighbors' average. A type with no table entry gets 0.
 function makeFillCode(fieldName, array, location, role, table) {
     const kind = LOCATION_NAMES[location].suffix;
     const index = `index${kind}`;

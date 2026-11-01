@@ -170,9 +170,8 @@ function createSimulationBindGroup(device, buffers, canvasView) {
         entries: [{ binding: 0, resource: canvasView }],
     });
 
-    // A canvas view is valid only inside the animation callback that got it.
-    // Binding an expired one makes the driver reject the whole command buffer
-    // without a word, and the solver silently does not advance, so every
+    // A canvas view is valid only inside the animation callback that got it; an
+    // expired one makes the driver reject the command buffer silently. Every
     // submission that does not draw binds this one-pixel stand-in instead.
     const idleTexture = device.createTexture({
         label: 'compute-only canvas stand-in',
@@ -206,10 +205,8 @@ function createSimulationBindGroup(device, buffers, canvasView) {
     return { textureGroup, computeGroup, bufferGroup, pipelineLayout, textureLayout };
 }
 
-// The frame, as dispatches
-//
-// A frame is one compute pass. The level is set by a one-thread kernel rather
-// than a binding, so no dispatch needs the pass to end.
+// The frame, as dispatches: one compute pass, the level set by a one-thread
+// kernel so no dispatch needs the pass to end.
 
 // The points a kernel covers, in the field's own index space: the interior
 // unknowns (an x-face field has one more column than cells), or the whole array.
@@ -246,17 +243,14 @@ class CycleRunner {
     }
 
     // The extent comes from the kernel's own shape, never from the call site: a
-    // margin kernel at the interior extent leaves the outer ring unwritten, which
-    // looks in the picture like a physical bias.
+    // margin kernel at the interior extent leaves the outer ring unwritten.
     dispatchForField(kernel, equation, level) {
         const margin = marginKernels().includes(kernel);
         const [x, y] = dispatchExtent(this.plate, equation.location, level, margin);
         this.dispatch(`${kernel}_${equation.field}`, x, y);
     }
 
-    // A kernel per level: a queue write is ordered against submitted work and
-    // not against the encoder being built, so every write would land before the
-    // pass ran.
+    // A kernel per level, not a queue write (setLevel_ in kernels.js).
     setLevel(level) {
         this.dispatch(`setLevel${level}`, 1, 1);
     }

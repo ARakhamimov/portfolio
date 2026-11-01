@@ -151,11 +151,8 @@ function verifyCheckBody(file) {
     return verifyCheckBodies.get(file);
 }
 
-// The file-prefixed calls a page makes, which is how the static check and the
-// verification page both decide whether page.js calls a helper nothing
-// defines. A name like diagnosticsSlug can only come from diagnostics.js, while
-// an unprefixed name may be local to the page; a function the page declares
-// itself is not a cross-file call.
+// The file-prefixed calls a page makes, for finding a helper page.js calls that
+// nothing defines. An unprefixed name may be local to the page.
 function verifyPrefixedCalls(pageText) {
     const prefixes = ['diagnostics', 'controls', 'app', 'case', 'runtime',
         'kernels', 'draw', 'grid', 'fields', 'geometry', 'coefficients', 'system',

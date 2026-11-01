@@ -1,10 +1,9 @@
 // sandbox.js, by Allen Rakhamimov.
 // What the sandbox refuses, and what its editor does to a layout.
 //
-// Plain functions on plain data, so a check can call them. The page owns only
-// the DOM and the pointer; every edit it makes is one of these followed by
-// sandboxProblems, and a refused edit changes nothing. Nothing in the solver
-// depends on this file.
+// Plain functions on plain data, so a check can call them; every page edit is
+// one of these followed by sandboxProblems. Nothing in the solver depends on
+// this file.
 
 'use strict';
 
@@ -21,8 +20,8 @@ function sandboxProblems(preset) {
     const shapes = preset.geometry.shapes || [];
     const size = (x) => x.toFixed(3);
 
-    if (ports.length > boundaryPortCount()) {
-        problems.push(`At most ${boundaryPortCount()} inlets and outlets; this layout has ${ports.length}.`);
+    if (ports.length > BOUNDARY_PORT_COUNT) {
+        problems.push(`At most ${BOUNDARY_PORT_COUNT} inlets and outlets; this layout has ${ports.length}.`);
     }
     ports.forEach((port, k) => {
         const name = sandboxPortName(port, ports);
@@ -117,13 +116,9 @@ function sandboxInkOf(shape) {
     return shape.solid === false ? 'carve' : 'solid';
 }
 
-// The shape a drag from `from` to `to` draws, with the editor's settings in
-// `pen` ({ ink, width, strength, shell }): a circle from its center out to
-// its rim, a box from corner to corner, a capsule along the stroke at the
-// pen's width. A brush starts a stroke at `from` alone, and the drag extends
-// it (sandboxStrokeExtend). A pellet is drawn like a circle and is always a
-// solid core in a catalyst shell, whatever the ink. Positions are the unit
-// square, y down the screen.
+// The shape a drag from `from` to `to` draws with the editor's `pen`. A brush
+// starts a stroke at `from` alone (sandboxStrokeExtend carries it on); a pellet
+// is a solid core in a catalyst shell whatever the ink.
 function sandboxShapeFromDrag(tool, from, to, pen) {
     const { ink, width = 0, strength = 1, shell = 0 } = pen;
     if (tool === 'pellet') {
@@ -147,10 +142,9 @@ function sandboxShapeFromDrag(tool, from, to, pen) {
     throw new Error(`a drawing tool is a circle, a box, a capsule, a brush or a pellet, not ${tool}`);
 }
 
-// A brush stroke carried on to `point`, or the same stroke when the point is
-// closer to its last one than a quarter of the stroke's width: points that
-// close add nothing a viewer could see and cost the classification a segment
-// each. Returns a new shape and never edits the one it was given.
+// A brush stroke carried on to `point`, as a new shape. A point closer than a
+// quarter of the stroke's width to the last adds nothing visible and would
+// cost the classification a segment, so it is skipped.
 function sandboxStrokeExtend(stroke, point) {
     const last = stroke.points[stroke.points.length - 1];
     if (Math.hypot(point.x - last.x, point.y - last.y) < stroke.radius / 2) return stroke;
@@ -196,11 +190,10 @@ function sandboxLayoutText(layout) {
 }
 
 // A case saved from the sandbox
-//
-// A saved case is a case file: one call, caseRegisterExported, holding plain
-// data (the layout, the reaction and the slider values) and no code. Put in
-// scripts/cases/ and listed in manifest.js it becomes a case of its own; loaded
-// back into the page it is read as data, never run.
+
+// A saved case is a case file holding one call, caseRegisterExported, on plain
+// data. Listed in manifest.js it becomes a case; loaded back into the page it
+// is read as data, never run.
 
 const SANDBOX_EXPORT_FORMAT = 'vizier sandbox case';
 const SANDBOX_EXPORT_VERSION = 1;
@@ -283,7 +276,7 @@ function sandboxPortName(port, ports) {
     return `${name} from ${+port.from.toFixed(3)} to ${+port.to.toFixed(3)}`;
 }
 
-// A function and not a table, because its keys are another file's constants.
+// A port's type in the words a refusal uses.
 function sandboxTypeWord(type) {
     return { [INLET]: 'inlet', [OUTLET]: 'outlet', [SYMMETRY]: 'symmetry edge', [WALL]: 'wall' }[type]
         || 'port';

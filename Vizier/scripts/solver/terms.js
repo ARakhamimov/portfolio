@@ -2,29 +2,15 @@
 // The dictionary of discretized PDE terms, and the WGSL functions its entries
 // share.
 //
-// Each entry gives its value at a point as WGSL, and its diagonal: how much the
-// value changes when the point's own value goes up by one. Neighbors are left,
-// right, above and below; rows count down the screen, so above is row - 1.
-// Each entry also says how the term is written on the equation panel.
+// Each entry gives its value at a point as WGSL, its diagonal (the slope in the
+// point's own value) and how the panel writes it. Rows count down the screen,
+// so above is row - 1.
 
 'use strict';
 
-// Keyed by the name a case declares. q is the array the equation solves; the
-// term's coefficients and other fields arrive already written as WGSL. Each
-// entry has:
-//   describe(c)      the sign the term enters du/dt = ... with, and its body,
-//                    for the panel
-//   value(q, args)   the term at a point, as WGSL
-//   diagonal         its slope in the point's own value, where it has one
-// and, where it needs them:
-//   problem(term, location)    why the term cannot be written on a row at that
-//                              location, or null
-//   arguments(term, args, location, level)   the WGSL arguments past the
-//                              coefficients and fields termAsWgsl writes
-//   schurDiagonal(term, equation, coefficient)   its part of a face row's
-//                              diagonal, for Schur relaxation
-//   reaction(field, term)      which species it consumes or produces, and the
-//                              factors its rate multiplies, for the reaction line
+// Keyed by the name a case declares; q is the solved array. Each entry has
+// describe, value and a diagonal where it has one; problem, arguments,
+// schurDiagonal and reaction where it needs them.
 const TERM_DICTIONARY = {
 
     // du/dt, which the equation code applies once to the sum of the terms.
@@ -156,8 +142,8 @@ const TERM_DICTIONARY = {
         reaction: (field) => ({ consumes: field, factors: [field] }),
     },
 
-    // -k q^2.
-    // The diagonal is k q, not the derivative 2 k q: q^2 is taken as (k q) q.
+    // -k q^2. The diagonal is -k q, not the derivative -2 k q: q^2 is taken as
+    // (k q) q.
     secondOrderSink: {
         describe: (c) => ({ sign: '-', body: `${c.rate(c.params.rate)} ${c.symbol}^2` }),
         value: (q, { rate }) => `-${rate} * ${q}[here] * ${q}[here]`,
@@ -181,9 +167,8 @@ const TERM_DICTIONARY = {
     },
 
     // -k q (partner) / (K + q): Michaelis-Menten with no partner, Monod with one.
-    // The saturation reads max(q, 0), so ringing below -K cannot flip the
-    // diagonal's sign, and the diagonal is the rate over the saturation, not
-    // the derivative.
+    // Reads max(q, 0) in the saturation, so ringing below -K cannot flip the
+    // diagonal's sign. The diagonal is the rate over the saturation.
     saturatingSink: {
         describe(c) {
             const K = c.coefficient(c.params.halfSaturation, 'halfSaturation');
@@ -241,9 +226,8 @@ const TERM_DICTIONARY = {
         },
     },
 
-    // -(lap A) dA/dx or dA/dy at a face, the Lorentz force in two dimensions, with
-    // A the induced potential plus the applied field's. The Laplacian at a face
-    // is the average of the two centers', and a center outside the interior is
+    // -(lap A) dA/dx or dA/dy at a face, A the induced plus the applied potential.
+    // The face's Laplacian averages two centers', a center outside the interior
     // replaced by its interior neighbor, so nothing reads past the ghost ring.
     lorentzForce: {
         describe: (c) => ({ sign: '-',
@@ -360,9 +344,9 @@ function proportionalSign(params, entry = 'proportionalSource') {
     return params.sign;
 }
 
-// Why a term cannot be written at this row, or null when it can (each entry's
-// problem). On a momentum row a varying viscosity needs the full stress, and
-// advection's blend reads its diffusivity as one number.
+// Why a term cannot be written at this row, or null. On a momentum row a
+// varying viscosity needs the full stress, and advection's blend reads its
+// diffusivity as one number.
 function termProblem(term, equation) {
     const entry = TERM_DICTIONARY[term.term];
     if (entry === undefined) return 'no such term in the dictionary';
@@ -377,7 +361,7 @@ function coefficientIsOneNumber(coefficient) {
         && !coefficientIsPainted(coefficient);
 }
 
-// A number, a slot, a profile or a painted array, by the resolver in coefficients.js.
+// A number, a slot, a profile or a painted array (coefficientCodeOf).
 function coefficientAsWgsl(coefficient) {
     if (coefficient === undefined) return '1.0';
     return coefficientCodeOf(coefficient, 'here');
@@ -452,7 +436,8 @@ function velocityAt(field, location, level) {
 }
 
 // Any field at this row's points: in place, or the plain average of the two
-// points of its own location either side. A face field on a face row is refused.
+// points of its own location either side. A face field on a face row is
+// refused.
 function fieldAtRow(name, location, level) {
     const array = arrayAtLevel(name, level);
     const stored = fieldStoredAt(name);
@@ -478,9 +463,8 @@ function termsProfileAsWgsl(profile) {
     return `(${profile.wgsl})`;
 }
 
-// The term as declared, with its coefficients and fields written as WGSL at
-// one time level: what an entry's value and diagonal are given. The entry's
-// own arguments come last, from what is written here.
+// The term with its coefficients and fields written as WGSL at one time level:
+// what an entry's value and diagonal are given.
 function termAsWgsl(term, equation, level) {
     const location = LOCATION_NAMES[equation.location].kind;
     const written = { ...term };

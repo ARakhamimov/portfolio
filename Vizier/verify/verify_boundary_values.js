@@ -11,12 +11,9 @@
 //      a coefficient that opts in the same way). This reads the WGSL each preset
 //      emits, so it catches a generator that ignored the table as readily as a
 //      case that forgot to list a name.
-//   2. The linearized Arrhenius reference T0 does not follow the feed slider,
-//      and the panel's Damkohler number at the feed does, summed over every
-//      reaction that consumes the feed. A viewer's values are laid over the
-//      finished preset, so a T0 read off the feed temperature would move on any
-//      rebuild; a feed moved away from T0 changes the rate there by
-//      exp(s (T_feed - T0)).
+//   2. The Arrhenius reference T0 does not follow the feed slider, and the
+//      panel's Damkohler number at the feed does, by exp(s (T_feed - T0)),
+//      summed over every reaction that consumes the feed.
 //   3. Every slider a case lists moves a slot its generated shader reads, and
 //      every slot the shader reads has a slider listed.
 //   4. A flow case solves temperature exactly where something can move it from
@@ -131,12 +128,9 @@ section('2. T0 STAYS PUT, AND THE FEED DAMKOHLER NUMBER MOVES', () => {
     if (cases === 0) failures.push('section 3 is trivially met: no preset is temperature-dependent');
 });
 
-// Each slider a preset offers has to feed a slot that preset's generated shader
-// reads. The slots each slider feeds come from controls.js, and whether the
-// shader reads them is read off the WGSL, so a case whose system lost the term
-// a slider moves (a viscosity slider on a case with no momentum row) fails
-// here. The positive control is the conduction case, which declares a viscosity
-// of zero and offers exactly one slider.
+// Read off the WGSL, so a case whose system lost the term a slider moves fails
+// here. The positive control is the conduction case, with a viscosity of zero
+// and exactly one slider.
 section('3. EVERY SLIDER MOVES A SLOT THE SHADER READS', () => {
     let offered = 0, presets = 0;
     const listing = {};
@@ -181,12 +175,9 @@ section('3. EVERY SLIDER MOVES A SLOT THE SHADER READS', () => {
     if (pattern) console.log(`  ${pattern.id}: ${listing[pattern.id].join(', ')}`);
 });
 
-// Held from outside: each flow preset is built with its temperature equation
-// forced in, then asked whether anything could move T from its starting value:
-// a Dirichlet value of another temperature on a type the plate has, a term on T
-// beyond transport, a term elsewhere that reads T, or a coefficient slot on T's
-// own row. A preset that drops T has none of these, and one that keeps it has
-// at least one, or it would be solving a flat field.
+// Held from outside: each flow preset is built with temperature forced in, then
+// asked whether a boundary value, a term or a slot could move T. A preset that
+// drops T has none, and one that keeps it has at least one.
 section('4. TEMPERATURE IS SOLVED EXACTLY WHERE SOMETHING CAN MOVE IT', () => {
     let kept = 0, dropped = 0;
     const readsTemperature = (value) => {

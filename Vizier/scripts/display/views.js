@@ -8,12 +8,9 @@
 
 'use strict';
 
-// Each record: `name`, the button's label; `needs`, the fields the system must
-// solve (allOf, anyOf), and whether it needs an advection term, a material or
-// the Lorentz force; `fieldRow`, which fields the row under the views names
-// while this view is on; `fieldView: false` for the two views that are not
-// pictures of a field; and `legend`, which returns the key, the note and the
-// hatch rows (legend.js lays them out).
+// Each record: `name`; `needs`, what the system must solve or carry; `fieldRow`,
+// what the row under the views names; `fieldView: false` for the two views that
+// are not pictures of a field; and `legend`, its key, note and hatch rows.
 const VIEWS = [
     {
         name: 'species',
@@ -66,7 +63,7 @@ const VIEWS = [
             note: 'Hue is direction and saturation is speed against the peak on this level, so '
                 + 'slow fluid fades toward neutral. The cutoff slider blanks everything below a '
                 + 'fraction of that peak, which shows where a dead zone ends.',
-            unstriped: 'The stripes give the axis and fade with speed; which way along it is what the '
+            unstriped: 'The stripes give the axis and fade with speed against the same peak; which way along it is what the '
                 + 'direction arrows (key <kbd>a</kbd>) show.',
         }),
     },
@@ -245,8 +242,7 @@ const VIEWS = [
         name: 'material',
         needs: { material: true },
         // A profile case's materials as swatches, or a painted case's bare
-        // material and a bar per paint from its weakest to its strongest,
-        // darkening on a log scale as drawPaintedArm does.
+        // material and a log-scale bar per paint, as drawPaintedArm draws them.
         legend: ({ system }) => {
             const materials = drawMaterials(system);
             const entries = materials ? materials.entries : [];
@@ -304,12 +300,13 @@ const VIEWS = [
             const colors = displaySettings.boundaryColors;
             const colorOf = (name) => colors[BOUNDARY_NAMES.indexOf(name)];
             return {
-                key: legendSwatches(BOUNDARY_NAMES.map((name, k) => [colors[k], name])),
+                // Inert is face padding only; no cell center is ever inert.
+                key: legendSwatches(BOUNDARY_NAMES.filter((name) => name !== 'inert')
+                    .map((name) => [colorOf(name), name])),
                 note: 'The one view that draws the ghost ring, where the domain\'s edge types live. '
-                    + 'Inert is padding with no neighboring cell. No arrows are drawn here, since they '
-                    + 'would sit out of register with the ring.',
+                    + 'No arrows are drawn here, since they would sit out of register with the ring.',
                 hatches: [['horizontal', colorOf('inlet'), 'inlet'], ['rising', colorOf('outlet'), 'outlet'],
-                          ['falling', colorOf('symmetry'), 'symmetry'], ['vertical', colorOf('inert'), 'inert']],
+                          ['falling', colorOf('symmetry'), 'symmetry']],
                 unstriped: 'Unstriped is fluid or wall.',
             };
         },

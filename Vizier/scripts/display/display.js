@@ -2,9 +2,8 @@
 // Every color and threshold the draw shader and the legends read, and how the
 // page writes a number.
 //
-// One table, so a threshold or a color changes in one place and the legend
-// cannot draw a different red from the canvas. Nothing in the solver depends on
-// this file.
+// One table, so the legend cannot draw a different red from the canvas.
+// Nothing in the solver depends on this file.
 
 'use strict';
 
@@ -14,10 +13,9 @@ const displaySettings = {
     temperatureHot: [1.0, 0.55, 0.0],
     temperatureCold: [0.0, 0.0, 0.19],
     maxConcentration: 1,
-    // The species view: hue is what a mixture is made of, each species' hue
-    // weighted by its share; lightness is how much, mixing out of white as the
-    // scaled total rises to one. A deep matte palette, in DRAW_SPECIES_FIELDS
-    // order; see drawSpeciesHues.
+    // Hue is what a mixture is made of, weighted by share; lightness is how
+    // much, out of white as the scaled total rises to one. In
+    // DRAW_SPECIES_FIELDS order.
     speciesHues: [
         [0.70, 0.15, 0.17],     // A, red
         [0.13, 0.52, 0.30],     // B, green
@@ -26,10 +24,9 @@ const displaySettings = {
     ],
     speciesHatches: ['vertical', 'horizontal', 'rising', 'falling'],
     maxSpeed: 2,
-    // Green below the threshold, one ramp per order of magnitude above. A
-    // converged field is about 1e-5 at worst, so it stays green with four
-    // orders above it to show where the budget fell behind.
-    divergenceThreshold: 1e-7,
+    // Green below the threshold, one ramp step per order of magnitude above,
+    // saturating divergenceDecades orders up.
+    divergenceThreshold: 1e-6,
     divergenceDecades: 4,
     divergenceMet: [0.0, 0.45, 0.0],
     residualFloor: 1e-8,
@@ -76,9 +73,8 @@ const displaySettings = {
     // Light, so near-zero rotation reads as blank and noise does not speckle.
     signedLight: [0.96, 0.96, 0.97],
 
-    // The switches a page opens with, and the hatch, arrow and contour
-    // spacings, are CONTROLS_MEMBERS in grid.js: they live in the controls
-    // buffer, so toggling one is a buffer write.
+    // The switches and the hatch, arrow and contour spacings live in the
+    // controls buffer (CONTROLS_MEMBERS in grid.js).
     accessibleFloor: 0.02,      // below this share of full scale a cell is unhatched
     arrowFloor: 0.005,          // of the peak speed; no arrow in stagnant fluid
     arrowOpacity: 0.9,

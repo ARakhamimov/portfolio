@@ -126,12 +126,9 @@ function checkEveryPresetRenders() {
 }
 
 // 3. The sign an entry declares is the sign its arithmetic produces
-//
-// Each entry is evaluated on a state built so that the body it writes comes out
-// positive, so the sign of the result is the sign it should declare. Most
-// entries are positive on a flat positive state. An entry carrying a derivative
-// gets a state that fixes the derivative's sign: a bowl for a Laplacian, a ramp
-// for a gradient and for advection, a spreading velocity for the divergence.
+
+// Each entry runs on a state where its written body is positive: a flat one, or
+// a bowl, a ramp or a spreading velocity for an entry carrying a derivative.
 
 const SITE = { column: 6, row: 5 };
 
@@ -156,11 +153,9 @@ function flatState(plate, value = 0.6) {
     return state;
 }
 
-// The generated WGSL of one row, run in JavaScript. WGSL's arithmetic,
-// comparisons, calls and array reads read the same in JavaScript once the
-// declarations lose their types and a whole number loses its u, so this
-// evaluates the shader's own text and is not a second copy of the arithmetic.
-// The arrays are the plate's, and the Coefficients buffer is its slot values.
+// The generated WGSL of one row, run in JavaScript once the declarations lose
+// their types and a whole number its u, so this evaluates the shader's own text
+// and is not a second copy of the arithmetic.
 function wgslAsJavaScript(text) {
     return text
         .replace(/fn\s+(\w+)\s*\(([^)]*)\)\s*(?:->\s*\w+\s*)?\{/g, (match, name, args) =>
@@ -200,10 +195,8 @@ function loadState(plate, state) {
     }
 }
 
-// One term on its own, in a steady row, so the row's terms are that term's
-// value and nothing else. The theta method is applied once to the sum of the
-// terms by the equation code, the same way for every entry, so a steady row is
-// enough to see an entry's sign.
+// One term alone in a steady row. The equation code applies theta once to the
+// sum, the same way for every entry, so a steady row shows an entry's sign.
 function contributionOf(plate, termSpec, location, state) {
     loadState(plate, state);
     const equation = normalizeEquation({ field: termSpec.on, location, steady: true,
@@ -403,14 +396,10 @@ function checkNotation() {
 }
 
 // The Oregonator is Field's equations
-//
-// The case writes the mechanism as tagged terms with its constants converted to
-// mM. This writes Field's unscaled equations (Scholarpedia 2(5):1386) from his
-// own constants in M, converts them here, and checks each species' row of the
-// generated shader against them at several states. A constant in the wrong
-// units, a term on the wrong species, or a quotient slot built wrong on the
-// host gives a plausible picture and fails here. k_e and f are the case's own
-// choices and are read from the preset; everything else is Field's.
+
+// Field's unscaled equations (Scholarpedia 2(5):1386) from his own constants in
+// M, against each species' generated row at several states. k_e and f are the
+// case's own choices, read from the preset.
 function checkOregonator() {
     const cases = casePresets().filter((preset) => preset.system.physics === 'oregonator');
     check('some case runs the Oregonator', cases.length > 0, `${cases.length} cases`);

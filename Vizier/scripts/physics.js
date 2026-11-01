@@ -2,20 +2,15 @@
 // One builder per physics: the equations a case's declaration becomes, its
 // boundary table and its starting state.
 //
-// A case names its physics (system.physics) and physicsBuildSystem calls that
-// physics' builder; the terms each builder lists are entries of the term
-// dictionary (terms.js). A first read takes physicsSystem, then the builder
-// for one case's physics. Everything here reads a preset and writes nothing
-// back.
+// The terms each builder lists are entries of the term dictionary (terms.js).
+// A first read takes physicsSystem, then the builder for one case's physics.
 
 'use strict';
 
 // Shared numbers
 
-// The one exception to CASE_THETA: Schrodinger's equation has no stiff
-// decaying mode for Crank-Nicolson to ring on, and theta = 1/2 is what keeps
-// the total probability, which 0.55 would lose a little of every step. Set by
-// the physics, never by a case.
+// The one exception to CASE_THETA: Schrodinger's equation has no stiff mode to
+// ring, and theta = 1/2 keeps the total probability, which 0.55 would lose.
 const PHYSICS_SCHRODINGER_THETA = 0.5;
 
 // hbar / 2m, with hbar = m = 1.
@@ -48,6 +43,7 @@ function physicsBuildSystem(preset) {
         case 'reactionDiffusion': return physicsPatternSystem(preset);
         case 'oregonator':        return physicsOregonatorSystem(preset);
         case 'flow':              return physicsFlowSystem(preset);
+        case 'noFlow':            return physicsNoFlowSystem(preset);
         case 'conduction':        return physicsConductionSystem(preset);
         case 'permeation':        return physicsPermeationSystem(preset);
         case 'electrostatics':    return physicsPotentialSystem(preset);
@@ -110,14 +106,9 @@ function physicsPatternSystem(preset) {
     });
 }
 
-// Electrostatics and magnetostatics without free current are Darcy's pair of
-// rows renamed, written the way they are relaxed:
-//
+// Darcy's pair of rows renamed:
 //     (1/eps) D + grad phi = 0,      div D = rho
 //     (1/mu)  B + grad psi = 0,      div B = 0
-//
-// so the material is a first order sink on the flux rows and the charge a
-// source on the constraint row.
 function physicsPotentialSystem(preset) {
     const electric = preset.system.physics === 'electrostatics';
     const material = electric ? preset.coefficients.inversePermittivity : preset.coefficients.inversePermeability;
@@ -151,11 +142,8 @@ function physicsChargeTerm(charges) {
     return { term: 'source', value: density.at, wgsl: density.wgsl };
 }
 
-// The telegraph equations in first order form, with the wave speed as the unit:
-//
+// The telegraph equations, the wave speed as the unit; neither row a constraint:
 //     dJ/dt + gamma J = -grad V,      dV/dt + div J = 0
-//
-// Both rows are unsteady and neither is a constraint.
 function physicsTelegraphSystem(preset) {
     const unsteady = { theta: CASE_THETA, timeStep: preset.solver.timeStep };
     const current = (field, location, component) => ({
@@ -175,16 +163,11 @@ function physicsTelegraphSystem(preset) {
     });
 }
 
-// Schrodinger's equation for psi = psi_R + i psi_I, in units where hbar = m = 1:
-//
+// Schrodinger's equation, hbar = m = 1, V = V0 w(x, y):
 //     dpsi_R/dt = -(1/2) lap psi_I + V psi_I
 //     dpsi_I/dt =  (1/2) lap psi_R - V psi_R
-//
-// with the potential energy V = V0 w(x, y), a height a slider moves times a
-// shape the case declares.
 // Each row's own value appears only in its time derivative, so the coupling is
-// lagged between the two rows, and that limits the step to about h^2 / 2
-// whatever theta is.
+// lagged, which limits the step to about h^2 / 2 whatever theta is.
 function physicsSchrodingerSystem(preset) {
     const unsteady = { location: CENTER, role: ROLE_SCALAR,
         theta: PHYSICS_SCHRODINGER_THETA, timeStep: preset.solver.timeStep };
@@ -206,9 +189,8 @@ function physicsSchrodingerSystem(preset) {
     });
 }
 
-// Gaussian packets exp(-r^2 / (2 width^2)) exp(i k.x), summed, since a wave
-// function is a superposition, as the two patches that seed its real and
-// imaginary parts.
+// Gaussian packets exp(-r^2 / (2 width^2)) exp(i k.x), summed, as the two
+// patches that seed the real and imaginary parts.
 function physicsWavePackets(packets) {
     const part = (take) => (px, py) => packets.reduce((sum, { x, y, width, kx, ky }) => {
         const envelope = Math.exp(-((px - x) ** 2 + (py - y) ** 2) / (2 * width * width));
@@ -220,19 +202,10 @@ function physicsWavePackets(packets) {
     ];
 }
 
-// The Oregonator, Field and Noyes's model of the Belousov-Zhabotinsky reaction
-// in the unscaled three-variable form of Field's review (Scholarpedia 2(5):1386,
-// 2007, Eqs 1-3). Five mass action steps, X = HBrO2 (species A),
-// Y = Br- (species B) and Z = Ce(IV) (species C):
-//
-//     a:  Y -> X             k_a = k1 [BrO3-]
-//     b:  X + Y -> P         k_b = k2
-//     c:  X -> 2X + 2Z       k_c = k3 [BrO3-]      autocatalytic
-//     d:  2X -> P            k_d = k4
-//     e:  Z -> (f/2) Y       k_e = kc [organic]
-//
-// Concentrations in mM: k_a 0.0768 and k_c 2.016 per second, k_b 2400 and k_d
-// 2.4 per mM per second. k_e and f are slots a viewer moves.
+// The Oregonator in the unscaled form of Field's review (Scholarpedia
+// 2(5):1386, 2007, Eqs 1-3), X = HBrO2 (A), Y = Br- (B), Z = Ce(IV) (C), mM:
+//     a: Y -> X   b: X + Y -> P   c: X -> 2X + 2Z   d: 2X -> P   e: Z -> (f/2) Y
+// k_e and f are slots a viewer moves.
 const PHYSICS_OREGONATOR = { stepA: 0.0768, stepB: 2400, stepC: 2.016, stepD: 2.4 };
 
 function physicsOregonatorTerms(preset, field) {
@@ -278,9 +251,8 @@ function physicsOregonatorSystem(preset) {
     });
 }
 
-// Momentum, the constraint, and whatever scalars can move.
-// `options.solveTemperature` overrides the rule, for the check that holds the
-// rule against the equations it would drop.
+// Momentum, the constraint, and whatever scalars can move. A check overrides
+// the temperature rule with `options.solveTemperature`.
 function physicsFlowSystem(preset, options = {}) {
     const solveTemperature = options.solveTemperature !== undefined
         ? options.solveTemperature : physicsSolvesTemperature(preset);
@@ -301,26 +273,7 @@ function physicsFlowSystem(preset, options = {}) {
             { field: 'pressure', location: CENTER, role: ROLE_PRESSURE,
               constraint: true, steady: true,
               terms: [{ term: 'divergenceOf', xField: 'xVelocity', yField: 'yVelocity' }] },
-            ...(solveTemperature ? [
-                { field: 'temperature', location: CENTER, role: ROLE_SCALAR, ...unsteady,
-                  terms: physicsTemperatureTerms(preset) },
-            ] : []),
-            ...(preset.system.transportsSpecies ? [
-                { field: 'speciesA', location: CENTER, role: ROLE_SCALAR, ...unsteady,
-                  terms: physicsSpeciesTerms(preset, 'speciesA') },
-                { field: 'speciesB', location: CENTER, role: ROLE_SCALAR, ...unsteady,
-                  terms: physicsSpeciesTerms(preset, 'speciesB') },
-            ] : []),
-            // Species C only where something can put it there, and D only where
-            // the side reaction makes it.
-            ...(preset.system.transportsSpecies && physicsHasSpeciesC(preset) ? [
-                { field: 'speciesC', location: CENTER, role: ROLE_SCALAR, ...unsteady,
-                  terms: physicsSpeciesTerms(preset, 'speciesC') },
-            ] : []),
-            ...(physicsHasSideReaction(preset) ? [
-                { field: 'speciesD', location: CENTER, role: ROLE_SCALAR, ...unsteady,
-                  terms: physicsSpeciesTerms(preset, 'speciesD') },
-            ] : []),
+            ...physicsScalarRows(preset, solveTemperature),
             ...(preset.system.physics === 'mhd' ? [
                 { field: 'potential', location: CENTER, role: ROLE_SCALAR, ...unsteady,
                   terms: physicsInductionTerms(preset) },
@@ -328,6 +281,43 @@ function physicsFlowSystem(preset, options = {}) {
         ],
         relaxation: { scheme: SCHUR_RELAXATION, c: preset.solver.constraintStep },
     });
+}
+
+// The same case with no flow: the temperature and species rows alone, which
+// carry no advection without a velocity to read.
+function physicsNoFlowSystem(preset) {
+    return normalizeSystem({
+        name: preset.id,
+        equations: physicsScalarRows(preset, physicsSolvesTemperature(preset)),
+        relaxation: { scheme: POINTWISE },
+    });
+}
+
+// The temperature and species rows a flow or no-flow case solves.
+function physicsScalarRows(preset, solveTemperature) {
+    const unsteady = { theta: CASE_THETA, timeStep: preset.solver.timeStep };
+    return [
+        ...(solveTemperature ? [
+            { field: 'temperature', location: CENTER, role: ROLE_SCALAR, ...unsteady,
+              terms: physicsTemperatureTerms(preset) },
+        ] : []),
+        ...(preset.system.transportsSpecies ? [
+            { field: 'speciesA', location: CENTER, role: ROLE_SCALAR, ...unsteady,
+              terms: physicsSpeciesTerms(preset, 'speciesA') },
+            { field: 'speciesB', location: CENTER, role: ROLE_SCALAR, ...unsteady,
+              terms: physicsSpeciesTerms(preset, 'speciesB') },
+        ] : []),
+        // Species C only where something can put it there, and D only where
+        // the side reaction makes it.
+        ...(preset.system.transportsSpecies && physicsHasSpeciesC(preset) ? [
+            { field: 'speciesC', location: CENTER, role: ROLE_SCALAR, ...unsteady,
+              terms: physicsSpeciesTerms(preset, 'speciesC') },
+        ] : []),
+        ...(physicsHasSideReaction(preset) ? [
+            { field: 'speciesD', location: CENTER, role: ROLE_SCALAR, ...unsteady,
+              terms: physicsSpeciesTerms(preset, 'speciesD') },
+        ] : []),
+    ];
 }
 
 // The momentum row. Open fluid carries shear and inertia; a porous bed carries
@@ -390,14 +380,10 @@ function physicsBuoyancyTerms(preset) {
         reference: spec.reference || 0, sign: spec.sign }];
 }
 
-// A conducting fluid in 2D, through the magnetic vector potential A = A0 + a,
-// the applied uniform field plus the induced part the system solves:
-//
+// A = A0 + a, the applied field plus the induced part the system solves:
 //     da/dt + u . grad a = eta lap a - u . grad A0 + (applied E, where it is)
 //     du/dt + ...        = ... - (lap A) grad A
-//
-// B = (dA/dy, -dA/dx) has no divergence whatever A is, so no constraint row is
-// needed. B is in Alfven units.
+// B = (dA/dy, -dA/dx) is divergence-free whatever A is, so no constraint row.
 function physicsLorentzTerms(preset, component) {
     if (preset.system.physics !== 'mhd') return [];
     return [{ term: 'lorentzForce', field: 'potential', component,
@@ -441,7 +427,7 @@ function physicsTemperatureTerms(preset) {
     const diffusivity = caseSliderValue(preset, 'thermalDiffusivity');
     const terms = [
         { term: 'diffusion', diffusivity: diffusivity },
-        physicsAdvection(diffusivity),
+        ...(physicsHasFlow(preset) ? [physicsAdvection(diffusivity)] : []),
         ...physicsFeedTerms(preset, 'temperature'),
     ];
 
@@ -474,7 +460,7 @@ function physicsSpeciesTerms(preset, field) {
     const terms = [
         ...(preset.coefficients.massDiffusivity > 0
             ? [{ term: 'diffusion', diffusivity: coefficientSlot('massDiffusivity') }] : []),
-        physicsAdvection(coefficientSlot('massDiffusivity')),
+        ...(physicsHasFlow(preset) ? [physicsAdvection(coefficientSlot('massDiffusivity'))] : []),
         ...physicsFeedTerms(preset, field),
     ];
 
@@ -511,9 +497,8 @@ function physicsSpeciesTerms(preset, field) {
             }
             return terms;   // the catalyst is conserved
 
-        // v = mu [S] X / (Ks + [S]), with B the biomass X. The source lands on
-        // the field it multiplies, which makes growth autocatalytic; the
-        // substrate falls at that rate over the yield, and nothing writes C.
+        // v = mu [S] X / (Ks + [S]), B the biomass X, so growth is autocatalytic;
+        // the substrate falls at that rate over the yield, and nothing writes C.
         case 'monod':
             if (field === 'speciesA') {
                 // Its own slot, the growth rate over the yield, divided on the
@@ -548,8 +533,7 @@ function physicsSpeciesTerms(preset, field) {
     }
 }
 
-// Gray and Scott's U + 2V -> 3V, with U fed at F and V removed at F + k:
-//
+// Gray and Scott's U + 2V -> 3V:
 //     dU/dt = D_U lap U - k U V^2 + F (1 - U)
 //     dV/dt = D_V lap V + k U V^2 - (F + k) V
 function physicsPatternTerms(preset, field) {
@@ -638,10 +622,7 @@ function physicsLayered(base, profile) {
     return coefficientProfile(coefficientIsSlot(base) ? base.coefficientSlot : base, profile);
 }
 
-// What a case solves
-//
-// One predicate each, read by the builders and by the panel, so the two cannot
-// disagree.
+// What a case solves: one predicate each, read by the builders and the panel.
 
 // Whether anything can make species C: a reaction, on open fluid or on painted
 // catalyst, a feed of it at an inlet, or a starting patch of it. Choosing a
@@ -721,13 +702,13 @@ function physicsBoundaryTable(preset) {
     for (const [name, value] of Object.entries(preset.wall.species || {})) {
         table[WALL].fields = { ...table[WALL].fields, [name]: both(DIRICHLET, value) };
     }
-    // A conducting fluid's induced potential is zero at inlets and on every
-    // solid, which holds the field's normal component at the applied value
-    // there; the outlet leaves it free.
     // A wave function is zero on every solid: an infinitely high wall.
     if (preset.system.physics === 'schrodinger') {
         table[WALL].fields = { waveReal: both(DIRICHLET, 0), waveImaginary: both(DIRICHLET, 0) };
     }
+    // A conducting fluid's induced potential is zero at inlets and on solids,
+    // holding the field's normal component at the applied value; the outlet
+    // leaves it free.
     if (preset.system.physics === 'mhd') {
         inlet.potential = both(DIRICHLET, 0);
         table[WALL].fields = { ...table[WALL].fields, potential: both(DIRICHLET, 0) };
