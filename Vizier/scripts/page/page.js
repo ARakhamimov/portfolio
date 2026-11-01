@@ -555,18 +555,32 @@ function applyLayout(layout, { record = true, redraw = true } = {}) {
 
 // Each frame and each second
 
-// One animation frame: the solver's frame, then any capture.
+// Frames handed to the GPU and not yet finished. A slow GPU is handed no
+// more, since a queue that runs ahead of it shows a picture that jumps and
+// a frame rate counting work never seen.
+const FRAMES_IN_FLIGHT = 3;
+let framesInFlight = 0;
+
+// One animation frame: the solver's frame, then any capture. The frame rate
+// counts frames the GPU has finished.
 function tick() {
+    requestAnimationFrame(tick);
+    if (framesInFlight >= FRAMES_IN_FLIGHT) return;
     scene.groups.textureGroup = device.createBindGroup({
         layout: scene.groups.textureLayout,
         entries: [{ binding: 0, resource: context.getCurrentTexture().createView() }],
     });
     scene.runner.frame(options, 'drawField');
-    state.frames++;
+    framesInFlight++;
+    device.queue.onSubmittedWorkDone().then(frameFinished, frameFinished);
     if (!options.paused) state.totalFrames++;
     if (capture.wanted) takeSnapshot();
     if (capture.recording) tickRecording();
-    requestAnimationFrame(tick);
+}
+
+function frameFinished() {
+    framesInFlight--;
+    state.frames++;
 }
 
 // Once a second: the frame rate, the dispatch count and the telemetry, then
@@ -632,7 +646,8 @@ function watchHealth() {
 
 // The speed watchdog: browsers say too little about a GPU to tell beforehand, so
 // a frame rate that stays low pauses the run and asks once, on the default
-// mesh, whether to step down a mesh or keep this one (remembered).
+// mesh, whether to step down a mesh or keep this one (remembered). A mesh it
+// stepped down to is watched the same way, so a step can follow a step.
 
 // Frames drawn a second, held for some seconds in a row after a warm-up that
 // skips a new case's first slow frames.
@@ -640,6 +655,9 @@ const SPEED_FLOOR = 20;
 const SPEED_WARMUP_SECONDS = 3;
 const SPEED_SLOW_SECONDS = 3;
 const SPEED_KEEP_KEY = 'vizierKeepResolution';
+
+// The case and mesh the watchdog last stepped down to.
+let speedLoweredTo = { presetId: '', cells: 0 };
 
 function watchSpeed() {
     const watch = scene.speedWatch;
@@ -650,8 +668,11 @@ function watchSpeed() {
         watch.slowSeconds = 0;
         return;
     }
-    const lower = appResolutions().find((cells) => cells < scene.plate.interior[0]);
-    if (scene.plate.interior[0] !== appBasePreset().solver.cells || lower === undefined || speedKept()) {
+    const cells = scene.plate.interior[0];
+    const lower = appResolutions().find((size) => size < cells);
+    const lowered = speedLoweredTo.presetId === appBasePreset().id && speedLoweredTo.cells === cells;
+    const watched = cells === appBasePreset().solver.cells || lowered;
+    if (!watched || lower === undefined || speedKept()) {
         watch.done = true;
         return;
     }
@@ -668,6 +689,7 @@ function watchSpeed() {
         + '<button type="button" id="speedKeep">Keep this resolution</button>', false, true);
     document.getElementById('speedLower').addEventListener('click', () => {
         options.paused = false;
+        speedLoweredTo = { presetId: appBasePreset().id, cells: lower };
         selectResolution(lower);
     });
     document.getElementById('speedKeep').addEventListener('click', () => {
