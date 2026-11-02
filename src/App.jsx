@@ -16,7 +16,7 @@ const App = () => {
             field: "Master's Project — Chemical Engineering",
             description: "A free, open-source browser tool, built as my Master's project at The Cooper Union, that simulates reactive flows in real time for teaching. A multigrid solver in WebGPU carries momentum, heat and species transport with reactions, and hatching over the colors keeps every view readable with color-vision deficiency. Preset cases, live sliders and image and video export are built in.",
             href: "/Vizier/index.html",
-            label: "Go",
+            label: "Go to Demo",
         },
     ]
     return (
