@@ -20,16 +20,8 @@ let context = null;
 let scene = null;
 let busyRebuilding = false;
 let options = null;
-const state = { frames: 0, fps: 0, totalFrames: 0, dispatches: 0, storage: '' };
+const state = { frames: 0, framesSince: 0, fps: 0, totalFrames: 0, dispatches: 0, storage: '' };
 const capture = { wanted: false, recording: null, starting: false };
-
-// TEMPORARY, for measuring the speed watchdog on a phone: with ?timing in the
-// address, a readout over the canvas gives the frame counts below each second.
-// ?inflight=1 or 2 lowers the cap on unfinished frames for the same test.
-const address = new URLSearchParams(location.search);
-const timingShown = address.has('timing');
-const timing = { since: 0, requested: 0, heldBack: 0, sent: 0, gpuBusyMs: 0,
-    lastFinish: 0, lastRequest: 0, longestGapMs: 0, adapter: '' };
 
 // The sandbox's undo stack, and the coefficients and layout that last ran
 // cleanly, which the divergence watchdog puts back.
@@ -63,9 +55,6 @@ async function openDevice() {
     const adapter = await navigator.gpu.requestAdapter();
     if (!adapter) { reportNoWebGPU('WebGPU is present but no adapter was returned.'); return false; }
 
-    const info = adapter.info || {};
-    timing.adapter = [info.vendor, info.architecture, info.device, info.description]
-        .filter(Boolean).join(' / ') || 'not given';
     const hasBgraStorage = adapter.features.has('bgra8unorm-storage');
     device = await adapter.requestDevice({
         requiredFeatures: hasBgraStorage ? ['bgra8unorm-storage'] : [],
@@ -228,7 +217,7 @@ async function buildScene({ keepView = true } = {}) {
     }
     scene = next;
     state.totalFrames = 0;
-    state.frames = 0;
+    startCountingFrames();
     state.storage = next.storage;
     state.dispatches = countDispatches(runner, options);
     return next;
@@ -248,7 +237,7 @@ function resetScene() {
     appSeedFields(plate, system);
     uploadPlate(device, buffers, plate);
     state.totalFrames = 0;
-    state.frames = 0;
+    startCountingFrames();
 }
 
 // The dispatches one frame makes, for the solver readout: the frame is run
@@ -569,79 +558,55 @@ function applyLayout(layout, { record = true, redraw = true } = {}) {
 // Frames handed to the GPU and not yet finished. A slow GPU is handed no
 // more, since a queue that runs ahead of it shows a picture that jumps and
 // a frame rate counting work never seen.
-const FRAMES_IN_FLIGHT = Number(address.get('inflight')) || 3;
+const FRAMES_IN_FLIGHT = 3;
 let framesInFlight = 0;
 
 // One animation frame: the solver's frame, then any capture. The frame rate
 // counts frames the GPU has finished.
-function tick(now) {
+function tick() {
     requestAnimationFrame(tick);
-    noteFrameRequested(now);
-    if (framesInFlight >= FRAMES_IN_FLIGHT) { timing.heldBack++; return; }
+    if (framesInFlight >= FRAMES_IN_FLIGHT) return;
     scene.groups.textureGroup = device.createBindGroup({
         layout: scene.groups.textureLayout,
         entries: [{ binding: 0, resource: context.getCurrentTexture().createView() }],
     });
     scene.runner.frame(options, 'drawField');
     framesInFlight++;
-    timing.sent++;
-    const sentAt = performance.now();
-    const finished = () => frameFinished(sentAt);
-    device.queue.onSubmittedWorkDone().then(finished, finished);
+    device.queue.onSubmittedWorkDone().then(frameFinished, frameFinished);
     if (!options.paused) state.totalFrames++;
     if (capture.wanted) takeSnapshot();
     if (capture.recording) tickRecording();
 }
 
-function frameFinished(sentAt) {
+function frameFinished() {
     framesInFlight--;
     state.frames++;
-    // The GPU runs frames in order, so this one started when it was sent or
-    // when the one before it finished, whichever came later.
-    const finishedAt = performance.now();
-    timing.gpuBusyMs += finishedAt - Math.max(sentAt, timing.lastFinish);
-    timing.lastFinish = finishedAt;
 }
 
-function noteFrameRequested(now) {
-    timing.requested++;
-    if (timing.lastRequest) timing.longestGapMs = Math.max(timing.longestGapMs, now - timing.lastRequest);
-    timing.lastRequest = now;
-}
-
-// Rates over the time since the last readout, which can be longer than a
-// second when the page is starved.
-function showTiming() {
-    const now = performance.now();
-    const seconds = timing.since ? (now - timing.since) / 1000 : 1;
-    const perSecond = (count) => (count / seconds).toFixed(0);
-    if (timingShown) {
-        document.getElementById('timing').textContent = [
-            `every ${seconds.toFixed(2)} s, cap ${FRAMES_IN_FLIGHT} in flight`,
-            `asked ${perSecond(timing.requested)}/s, held back ${perSecond(timing.heldBack)}/s`,
-            `sent ${perSecond(timing.sent)}/s, done ${perSecond(state.frames)}/s`,
-            `watchdog reads ${state.frames}`,
-            `GPU busy ${(timing.gpuBusyMs / (10 * seconds)).toFixed(0)}%`,
-            `longest gap ${timing.longestGapMs.toFixed(0)} ms`,
-            `${scene.plate.interior[0]} cells`,
-            `adapter: ${timing.adapter}`,
-        ].join('\n');
-    }
-    Object.assign(timing, { since: now, requested: 0, heldBack: 0, sent: 0, gpuBusyMs: 0, longestGapMs: 0 });
-}
-
-// Once a second: the frame rate, the dispatch count and the telemetry, then
-// the watchdog and the panel.
+// Once a second: the frame rate and the speed watchdog, then the telemetry,
+// the divergence watchdog and the panel. The speed watchdog goes first, so a
+// readback held up behind a slow GPU never holds it up.
 async function everySecond() {
-    showTiming();
-    state.fps = state.frames;
-    state.frames = 0;
+    state.fps = framesPerSecond();
+    startCountingFrames();
+    watchSpeed();
     state.dispatches = countDispatches(scene.runner, options);
     await scene.telemetry.read();
     if (!options.paused && monitorsMeasureWallHeatFlux(scene.system)) scene.telemetry.sampleHeatFlux();
     watchHealth();
-    watchSpeed();
     refresh();
+}
+
+// Frames finished per second since the count began. A timer can fire late on
+// a busy page, so the count is divided by the time that really passed.
+function framesPerSecond() {
+    const seconds = (performance.now() - state.framesSince) / 1000;
+    return seconds > 0 ? Math.round(state.frames / seconds) : 0;
+}
+
+function startCountingFrames() {
+    state.frames = 0;
+    state.framesSince = performance.now();
 }
 
 // The divergence watchdog: a NaN, an infinity or a value past the ceiling in any
@@ -693,19 +658,15 @@ function watchHealth() {
 }
 
 // The speed watchdog: browsers say too little about a GPU to tell beforehand, so
-// a frame rate that stays low pauses the run and asks once, on the default
-// mesh, whether to step down a mesh or keep this one (remembered). A mesh it
-// stepped down to is watched the same way, so a step can follow a step.
+// a frame rate that stays low pauses the run and asks, on any mesh, whether to
+// step down a mesh or keep this one. A phone that lags may not let the user
+// pause or switch it themselves. Keeping a mesh holds until the next rebuild.
 
 // Frames drawn a second, held for some seconds in a row after a warm-up that
 // skips a new case's first slow frames.
 const SPEED_FLOOR = 20;
 const SPEED_WARMUP_SECONDS = 3;
 const SPEED_SLOW_SECONDS = 3;
-const SPEED_KEEP_KEY = 'vizierKeepResolution';
-
-// The case and mesh the watchdog last stepped down to.
-let speedLoweredTo = { presetId: '', cells: 0 };
 
 function watchSpeed() {
     const watch = scene.speedWatch;
@@ -716,14 +677,6 @@ function watchSpeed() {
         watch.slowSeconds = 0;
         return;
     }
-    const cells = scene.plate.interior[0];
-    const lower = appResolutions().find((size) => size < cells);
-    const lowered = speedLoweredTo.presetId === appBasePreset().id && speedLoweredTo.cells === cells;
-    const watched = cells === appBasePreset().solver.cells || lowered;
-    if (!watched || lower === undefined || speedKept()) {
-        watch.done = true;
-        return;
-    }
     watch.secondsRunning++;
     if (watch.secondsRunning <= SPEED_WARMUP_SECONDS) return;
     watch.slowSeconds = state.fps < SPEED_FLOOR ? watch.slowSeconds + 1 : 0;
@@ -731,27 +684,25 @@ function watchSpeed() {
 
     watch.done = true;
     options.paused = true;
+    const lower = appResolutions().find((size) => size < scene.plate.interior[0]);
+    const offer = lower === undefined
+        ? 'This is the lowest resolution. '
+        : `${lower} cells is a quarter of the work. `
+            + '<button type="button" id="speedLower">Lower the resolution</button> ';
     say(`This case draws ${state.fps} frames a second here, too few to watch it move, so it `
-        + `is paused. ${lower} cells is a quarter of the work. `
-        + '<button type="button" id="speedLower">Lower the resolution</button> '
+        + `is paused. ${offer}`
         + '<button type="button" id="speedKeep">Keep this resolution</button>', false, true);
-    document.getElementById('speedLower').addEventListener('click', () => {
-        options.paused = false;
-        speedLoweredTo = { presetId: appBasePreset().id, cells: lower };
-        selectResolution(lower);
-    });
+    if (lower !== undefined) {
+        document.getElementById('speedLower').addEventListener('click', () => {
+            options.paused = false;
+            selectResolution(lower);
+        });
+    }
     document.getElementById('speedKeep').addEventListener('click', () => {
-        // Storage can be refused, as in a private window; the question then
-        // comes back on the next visit.
-        try { localStorage.setItem(SPEED_KEEP_KEY, '1'); } catch (error) { /* not remembered */ }
         options.paused = false;
         say('');
         refresh();
     });
-}
-
-function speedKept() {
-    try { return localStorage.getItem(SPEED_KEEP_KEY) === '1'; } catch (error) { return false; }
 }
 
 // Messages
