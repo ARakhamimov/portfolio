@@ -23,6 +23,14 @@ let options = null;
 const state = { frames: 0, fps: 0, totalFrames: 0, dispatches: 0, storage: '' };
 const capture = { wanted: false, recording: null, starting: false };
 
+// TEMPORARY, for measuring the speed watchdog on a phone: with ?timing in the
+// address, a readout over the canvas gives the frame counts below each second.
+// ?inflight=1 or 2 lowers the cap on unfinished frames for the same test.
+const address = new URLSearchParams(location.search);
+const timingShown = address.has('timing');
+const timing = { since: 0, requested: 0, heldBack: 0, sent: 0, gpuBusyMs: 0,
+    lastFinish: 0, lastRequest: 0, longestGapMs: 0, adapter: '' };
+
 // The sandbox's undo stack, and the coefficients and layout that last ran
 // cleanly, which the divergence watchdog puts back.
 let layoutHistory = [];
@@ -55,6 +63,9 @@ async function openDevice() {
     const adapter = await navigator.gpu.requestAdapter();
     if (!adapter) { reportNoWebGPU('WebGPU is present but no adapter was returned.'); return false; }
 
+    const info = adapter.info || {};
+    timing.adapter = [info.vendor, info.architecture, info.device, info.description]
+        .filter(Boolean).join(' / ') || 'not given';
     const hasBgraStorage = adapter.features.has('bgra8unorm-storage');
     device = await adapter.requestDevice({
         requiredFeatures: hasBgraStorage ? ['bgra8unorm-storage'] : [],
@@ -558,34 +569,71 @@ function applyLayout(layout, { record = true, redraw = true } = {}) {
 // Frames handed to the GPU and not yet finished. A slow GPU is handed no
 // more, since a queue that runs ahead of it shows a picture that jumps and
 // a frame rate counting work never seen.
-const FRAMES_IN_FLIGHT = 3;
+const FRAMES_IN_FLIGHT = Number(address.get('inflight')) || 3;
 let framesInFlight = 0;
 
 // One animation frame: the solver's frame, then any capture. The frame rate
 // counts frames the GPU has finished.
-function tick() {
+function tick(now) {
     requestAnimationFrame(tick);
-    if (framesInFlight >= FRAMES_IN_FLIGHT) return;
+    noteFrameRequested(now);
+    if (framesInFlight >= FRAMES_IN_FLIGHT) { timing.heldBack++; return; }
     scene.groups.textureGroup = device.createBindGroup({
         layout: scene.groups.textureLayout,
         entries: [{ binding: 0, resource: context.getCurrentTexture().createView() }],
     });
     scene.runner.frame(options, 'drawField');
     framesInFlight++;
-    device.queue.onSubmittedWorkDone().then(frameFinished, frameFinished);
+    timing.sent++;
+    const sentAt = performance.now();
+    const finished = () => frameFinished(sentAt);
+    device.queue.onSubmittedWorkDone().then(finished, finished);
     if (!options.paused) state.totalFrames++;
     if (capture.wanted) takeSnapshot();
     if (capture.recording) tickRecording();
 }
 
-function frameFinished() {
+function frameFinished(sentAt) {
     framesInFlight--;
     state.frames++;
+    // The GPU runs frames in order, so this one started when it was sent or
+    // when the one before it finished, whichever came later.
+    const finishedAt = performance.now();
+    timing.gpuBusyMs += finishedAt - Math.max(sentAt, timing.lastFinish);
+    timing.lastFinish = finishedAt;
+}
+
+function noteFrameRequested(now) {
+    timing.requested++;
+    if (timing.lastRequest) timing.longestGapMs = Math.max(timing.longestGapMs, now - timing.lastRequest);
+    timing.lastRequest = now;
+}
+
+// Rates over the time since the last readout, which can be longer than a
+// second when the page is starved.
+function showTiming() {
+    const now = performance.now();
+    const seconds = timing.since ? (now - timing.since) / 1000 : 1;
+    const perSecond = (count) => (count / seconds).toFixed(0);
+    if (timingShown) {
+        document.getElementById('timing').textContent = [
+            `every ${seconds.toFixed(2)} s, cap ${FRAMES_IN_FLIGHT} in flight`,
+            `asked ${perSecond(timing.requested)}/s, held back ${perSecond(timing.heldBack)}/s`,
+            `sent ${perSecond(timing.sent)}/s, done ${perSecond(state.frames)}/s`,
+            `watchdog reads ${state.frames}`,
+            `GPU busy ${(timing.gpuBusyMs / (10 * seconds)).toFixed(0)}%`,
+            `longest gap ${timing.longestGapMs.toFixed(0)} ms`,
+            `${scene.plate.interior[0]} cells`,
+            `adapter: ${timing.adapter}`,
+        ].join('\n');
+    }
+    Object.assign(timing, { since: now, requested: 0, heldBack: 0, sent: 0, gpuBusyMs: 0, longestGapMs: 0 });
 }
 
 // Once a second: the frame rate, the dispatch count and the telemetry, then
 // the watchdog and the panel.
 async function everySecond() {
+    showTiming();
     state.fps = state.frames;
     state.frames = 0;
     state.dispatches = countDispatches(scene.runner, options);
